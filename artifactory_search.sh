@@ -1,4 +1,11 @@
 #! /bin/bash
+#
+# Usage: ./artifactory_search.sh <branch>
+#
+# where <branch> can be:
+#  - anything git log understands, eg. branchname, commit sha, etc.
+#  - empty, in this case HEAD is condsidered as the base commit for search
+
 RCol='\e[0m'
 
 Red='\e[0;31m'
