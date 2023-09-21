@@ -1,0 +1,55 @@
+#! /bin/bash
+
+RED='\033[0;31m'
+NC='\033[0m' # No Color
+
+RESET=0
+while getopts ":r" option; do
+   case $option in
+      r)
+         RESET=1
+   esac
+done
+
+# branches to sync
+branches=( \
+   master \
+   feature/file-replication \
+   feature/fds-granpol-scheduler \
+   area/pasg \
+   rel4-1-x \
+)
+
+for branch in ${branches[@]}
+do
+   echo "syncing branch: [$branch]"
+   gh repo sync jlaz_pure/iridium -b $branch
+done
+
+git fetch --prune origin
+git fetch --prune upstream ${branches[@]}
+
+if [ "$RESET" == "1" ]
+then
+   for branch in ${branches[@]}
+   do
+      git rev-parse --verify $branch > /dev/null 2>&1
+      if [ "$?" != "0" ]
+      then
+         echo -e "no such branch: [$branch], skipping..."
+         continue
+      fi
+      if [ "$(git branch --show-current)" == "$branch" ]
+      then
+         echo -e "${RED}not resetting branch: [$branch], because we're on this branch\n" \
+            "please merge origin or upstream manually${NC}"
+      else
+         echo "resetting branch: [$branch]"
+         git branch --force $branch origin/$branch
+         if [ "$?" != "0" ]
+         then
+            echo -e "${RED}resetting branch failed${NC}"
+         fi
+      fi
+   done
+fi
