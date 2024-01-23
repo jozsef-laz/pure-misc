@@ -14,10 +14,9 @@ done
 # branches to sync
 branches=( \
    master \
-   feature/file-replication \
-   feature/fds-granpol-scheduler \
    area/pasg \
    rel4-1-x \
+   rel4-3-x \
 )
 
 for branch in ${branches[@]}
