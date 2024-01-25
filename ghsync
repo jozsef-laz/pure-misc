@@ -22,7 +22,7 @@ branches=( \
 for branch in ${branches[@]}
 do
    echo "syncing branch: [$branch]"
-   gh repo sync jlaz_pure/iridium -b $branch
+   gh repo sync pure-forks/jlaz-iridium -b $branch
 done
 
 git fetch --prune origin
