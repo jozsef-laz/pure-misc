@@ -1,16 +1,30 @@
 #!/usr/bin/env bash
 
+LOGTYPES_DEFAULT_ARG="middleware,platform,nfs"
+
 usage() {
    echo "Usage: $0 -c <clusters> [-h]" 1>&2
    echo "  -c <clusters>   where clusters are names of clusters separated by comma (ex. \"irp871-c01,irp871-c02\")" 1>&2
+   echo "  -l <logtypes>   list of logtypes which we want to download (separated by comma)"
+   echo "                     possible values:"
+   echo "                      - middleware: middleware.log"
+   echo "                      - platform: platform.log of FMs"
+   echo "                      - platform_blades: platform.log of blades"
+   echo "                      - nfs: nfs.log of blades"
+   echo "                      - system: system.log of FMs"
+   echo "                      - system_blades: system.log of blades"
+   echo "                     default value: \"$LOGTYPES_DEFAULT_ARG\""
    echo "  -h              help" 1>&2
    exit 1
 }
 
-while getopts "c:h" o; do
+while getopts "c:l:h" o; do
    case "${o}" in
       c)
          CLUSTERS_ARG=${OPTARG}
+         ;;
+      l)
+         LOGTYPES_ARG=${OPTARG}
          ;;
       *)
          usage
@@ -29,6 +43,31 @@ for CLUSTER in $CLUSTERS; do
    echo -n " [$CLUSTER]"
 done
 echo
+
+if [ -z "${LOGTYPES_ARG}" ]; then
+   LOGTYPES_ARG=$LOGTYPES_DEFAULT_ARG
+fi
+echo "logtypes to download: [$LOGTYPES_ARG]"
+DOWNLOAD_MIDDLEWARE_LOG=$(echo "$LOGTYPES_ARG" | grep "middleware")
+DOWNLOAD_PLATFORM_LOG=$(echo "$LOGTYPES_ARG" | grep "platform")
+DOWNLOAD_PLATFORM_BLADES_LOG=$(echo "$LOGTYPES_ARG" | grep "platform_blades")
+DOWNLOAD_NFS_LOG=$(echo "$LOGTYPES_ARG" | grep "nfs")
+DOWNLOAD_SYSTEM_LOG=$(echo "$LOGTYPES_ARG" | grep "system")
+DOWNLOAD_SYSTEM_BLADES_LOG=$(echo "$LOGTYPES_ARG" | grep "system_blades")
+
+#declare -A LOGNAME_PATTERN=( \
+#   ["middleware"]="middleware.log" \
+#   ["platform"]="platform.log" \
+#   ["platform_blades"]="platform.log" \
+#   ["nfs"]="nfs.log" \
+#   ["system"]="system.log" \
+#   ["system_blades"]="system.log" \
+#)
+
+SSH_PARAMS="\
+   -o \"UserKnownHostsFile=/dev/null\" \
+   -o \"StrictHostKeyChecking=no\" \
+   -o LogLevel=ERROR"
 
 DATE=$(date "+%F-T%H-%M-%S")
 # directory in which we download the logs
@@ -74,6 +113,7 @@ download_file_from_blade() {
    sshpass -p welcome ssh \
       -o "UserKnownHostsFile=/dev/null" \
       -o "StrictHostKeyChecking=no" \
+      -o LogLevel=ERROR \
       ir@$FM_IP "rm -f $LOGFILE; scp ir$BLADENUM:/logs/$LOGFILE ."
    RETVAL=$?
    if [ $RETVAL != 0 ]; then
@@ -92,11 +132,14 @@ download_file_from_blade() {
    sshpass -p welcome ssh \
       -o "UserKnownHostsFile=/dev/null" \
       -o "StrictHostKeyChecking=no" \
+      -o LogLevel=ERROR \
       ir@$FM_IP "rm -f $LOGFILE"
    RETVAL=$?
    if [ $RETVAL != 0 ]; then
       echo " Error in cleanup: RETVAL=$RETVAL"
    fi
+   # TODO: proper log about what happened
+   echo " Done"
 }
 
 for CLUSTER in $CLUSTERS; do
@@ -109,33 +152,72 @@ for CLUSTER in $CLUSTERS; do
       FM_IP=$(sshpass -p welcome ssh \
          -o "UserKnownHostsFile=/dev/null" \
          -o "StrictHostKeyChecking=no" \
+         -o LogLevel=ERROR \
          ir@$CLUSTER "purenetwork list --csv | grep 'fm$FMNUM.admin0,' | cut -d',' -f4")
       FM_DIR=$DIR/${CLUSTER}_sup${FMNUM}_${FM_IP}
       echo "FM_IP = [$FM_IP], FM_DIR=[$FM_DIR]"
       mkdir $FM_DIR
-      LOGFILES=$(sshpass -p welcome ssh \
-         -o "UserKnownHostsFile=/dev/null" \
-         -o "StrictHostKeyChecking=no" \
-         ir@$FM_IP "cd /logs; ls middleware.log* platform.log*")
-      echo "LOGFILES=[$LOGFILES]"
-      for LOGFILE in $LOGFILES; do
-         download_file ir@$FM_IP:/logs/$LOGFILE $FM_DIR
-         # if it's zstd file, decompress it
-         if [ $(echo "$LOGFILE" | grep "\.zst$") ] ; then
-            zstd -d $FM_DIR/$LOGFILE
-            rm $FM_DIR/$LOGFILE
-         fi
-      done
+      # TODO: put this in function
+      if [ ! -z "$DOWNLOAD_MIDDLEWARE_LOG" ]; then
+         LOGFILES=$(sshpass -p welcome ssh \
+            -o "UserKnownHostsFile=/dev/null" \
+            -o "StrictHostKeyChecking=no" \
+            -o LogLevel=ERROR \
+            ir@$FM_IP "cd /logs; ls middleware.log*")
+         echo "LOGFILES=[$LOGFILES]"
+         for LOGFILE in $LOGFILES; do
+            download_file ir@$FM_IP:/logs/$LOGFILE $FM_DIR
+            # if it's zstd file, decompress it
+            if [ $(echo "$LOGFILE" | grep "\.zst$") ] ; then
+               zstd -d $FM_DIR/$LOGFILE
+               rm $FM_DIR/$LOGFILE
+            fi
+         done
+      fi
+      if [ ! -z "$DOWNLOAD_PLATFORM_LOG" ]; then
+         LOGFILES=$(sshpass -p welcome ssh \
+            -o "UserKnownHostsFile=/dev/null" \
+            -o "StrictHostKeyChecking=no" \
+            -o LogLevel=ERROR \
+            ir@$FM_IP "cd /logs; ls platform.log*")
+         echo "LOGFILES=[$LOGFILES]"
+         for LOGFILE in $LOGFILES; do
+            download_file ir@$FM_IP:/logs/$LOGFILE $FM_DIR
+            # if it's zstd file, decompress it
+            if [ $(echo "$LOGFILE" | grep "\.zst$") ] ; then
+               zstd -d $FM_DIR/$LOGFILE
+               rm $FM_DIR/$LOGFILE
+            fi
+         done
+      fi
+      if [ ! -z "$DOWNLOAD_SYSTEM_LOG" ]; then
+         LOGFILES=$(sshpass -p welcome ssh \
+            -o "UserKnownHostsFile=/dev/null" \
+            -o "StrictHostKeyChecking=no" \
+            -o LogLevel=ERROR \
+            ir@$FM_IP "cd /logs; ls system.log*")
+         echo "LOGFILES=[$LOGFILES]"
+         for LOGFILE in $LOGFILES; do
+            download_file ir@$FM_IP:/logs/$LOGFILE $FM_DIR
+            # if it's zstd file, decompress it
+            if [ $(echo "$LOGFILE" | grep "\.zst$") ] ; then
+               zstd -d $FM_DIR/$LOGFILE
+               rm $FM_DIR/$LOGFILE
+            fi
+         done
+      fi
    done
 
    # for transferring the logs, we use FM1, because usually the active one is FM2
    FM1_IP=$(sshpass -p welcome ssh \
       -o "UserKnownHostsFile=/dev/null" \
       -o "StrictHostKeyChecking=no" \
+      -o LogLevel=ERROR \
       ir@$CLUSTER "purenetwork list --csv | grep 'fm1.admin0,' | cut -d',' -f4")
    BLADENUM=$(sshpass -p welcome ssh \
       -o "UserKnownHostsFile=/dev/null" \
       -o "StrictHostKeyChecking=no" \
+      -o LogLevel=ERROR \
       ir@$CLUSTER "pureblade list | grep healthy | tail -n1 | cut -d' ' -f1 | cut -d'B' -f2")
    echo "Cluster has $BLADENUM blades"
    for NUM in $(seq 1 $BLADENUM); do
@@ -144,19 +226,51 @@ for CLUSTER in $CLUSTERS; do
       mkdir -p $BLADE_DIR
 
       # TODO: future improvement could be to limit how many logs we download from a blade or for how much time in the past we're looking back
-      LOGFILES=$(sshpass -p welcome ssh \
-         -o "UserKnownHostsFile=/dev/null" \
-         -o "StrictHostKeyChecking=no" \
-         ir@$CLUSTER "ssh ir$NUM \"cd /logs; ls nfs.log nfs.log.*\"")
-      for LOGFILE in $LOGFILES; do
-         download_file_from_blade $LOGFILE $BLADE_DIR $NUM $FM1_IP $CLUSTER
-         if [ $(echo "$LOGFILE" | grep "\.zst$") ] ; then
-            zstd -d $BLADE_DIR/$LOGFILE
-            rm $BLADE_DIR/$LOGFILE
-         fi
-      done
+      if [ ! -z "$DOWNLOAD_NFS_LOG" ]; then
+         LOGFILES=$(sshpass -p welcome ssh \
+            -o "UserKnownHostsFile=/dev/null" \
+            -o "StrictHostKeyChecking=no" \
+            -o LogLevel=ERROR \
+            ir@$CLUSTER "ssh ir$NUM \"cd /logs; ls nfs.log nfs.log.*\"")
+         for LOGFILE in $LOGFILES; do
+            download_file_from_blade $LOGFILE $BLADE_DIR $NUM $FM1_IP $CLUSTER
+            if [ $(echo "$LOGFILE" | grep "\.zst$") ] ; then
+               zstd -d $BLADE_DIR/$LOGFILE
+               rm $BLADE_DIR/$LOGFILE
+            fi
+         done
+      fi
+      if [ ! -z "$DOWNLOAD_PLATFORM_BLADES_LOG" ]; then
+         LOGFILES=$(sshpass -p welcome ssh \
+            -o "UserKnownHostsFile=/dev/null" \
+            -o "StrictHostKeyChecking=no" \
+            -o LogLevel=ERROR \
+            ir@$CLUSTER "ssh ir$NUM \"cd /logs; ls platform.log*\"")
+         for LOGFILE in $LOGFILES; do
+            download_file_from_blade $LOGFILE $BLADE_DIR $NUM $FM1_IP $CLUSTER
+            if [ $(echo "$LOGFILE" | grep "\.zst$") ] ; then
+               zstd -d $BLADE_DIR/$LOGFILE
+               rm $BLADE_DIR/$LOGFILE
+            fi
+         done
+      fi
+      if [ ! -z "$DOWNLOAD_SYSTEM_BLADES_LOG" ]; then
+         LOGFILES=$(sshpass -p welcome ssh \
+            -o "UserKnownHostsFile=/dev/null" \
+            -o "StrictHostKeyChecking=no" \
+            -o LogLevel=ERROR \
+            ir@$CLUSTER "ssh ir$NUM \"cd /logs; ls system.log*\"")
+         for LOGFILE in $LOGFILES; do
+            download_file_from_blade $LOGFILE $BLADE_DIR $NUM $FM1_IP $CLUSTER
+            if [ $(echo "$LOGFILE" | grep "\.zst$") ] ; then
+               zstd -d $BLADE_DIR/$LOGFILE
+               rm $BLADE_DIR/$LOGFILE
+            fi
+         done
+      fi
    done
 done
 
-cp ../../ir_test.log latest-collection
+cp ../ir_test.log latest-collection
 
+echo "Directory in which the logs are downloaded: $DIR"
