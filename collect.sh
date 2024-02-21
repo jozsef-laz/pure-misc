@@ -16,7 +16,7 @@ usage() {
    echo "                     default value: \"$LOGTYPES_DEFAULT_ARG\""
    echo "  -d <dir path>   relative path where log pack directory shall be created" 1>&2
    echo "                     (ex. \"path/to/downloads\", then logs will be under \"path/to/downloads/irpXXX-cXX_2024-01-30-T17-00-37)" 1>&2
-   echo "                     only irpXXX-cXX... directory will be created (for safety considerations)" 1>&2
+   echo "                     only irpXXX-cXX... directory will be created but no parents (for safety considerations)" 1>&2
    echo "  -h              help" 1>&2
    exit 1
 }
