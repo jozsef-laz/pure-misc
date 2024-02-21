@@ -14,17 +14,23 @@ usage() {
    echo "                      - system: system.log of FMs"
    echo "                      - system_blades: system.log of blades"
    echo "                     default value: \"$LOGTYPES_DEFAULT_ARG\""
+   echo "  -d <dir path>   relative path where log pack directory shall be created" 1>&2
+   echo "                     (ex. \"path/to/downloads\", then logs will be under \"path/to/downloads/irpXXX-cXX_2024-01-30-T17-00-37)" 1>&2
+   echo "                     only irpXXX-cXX... directory will be created (for safety considerations)" 1>&2
    echo "  -h              help" 1>&2
    exit 1
 }
 
-while getopts "c:l:h" o; do
+while getopts "c:l:d:h" o; do
    case "${o}" in
       c)
          CLUSTERS_ARG=${OPTARG}
          ;;
       l)
          LOGTYPES_ARG=${OPTARG}
+         ;;
+      d)
+         DIR_PREFIX=${OPTARG}
          ;;
       *)
          usage
@@ -64,21 +70,27 @@ DOWNLOAD_SYSTEM_BLADES_LOG=$(echo "$LOGTYPES_ARG" | grep "system_blades")
 #   ["system_blades"]="system.log" \
 #)
 
+# TODO: use this
 SSH_PARAMS="\
    -o \"UserKnownHostsFile=/dev/null\" \
    -o \"StrictHostKeyChecking=no\" \
-   -o LogLevel=ERROR"
+   -o \"LogLevel=ERROR\""
 
 DATE=$(date "+%F-T%H-%M-%S")
 # directory in which we download the logs
 # we use the first cluster's name, because that's what indentifies the testbed
 FIRST_CLUSTER=$(echo $CLUSTERS | cut -d" " -f1)
 DIR="${FIRST_CLUSTER}_$DATE"
+echo "DIR_PREFIX=[$DIR_PREFIX]"
+if [ ! -z "$DIR_PREFIX" ]; then
+   DIR="$DIR_PREFIX/$DIR"
+fi
+DIR=$(realpath $DIR)
 echo "Directory in which we download the logs: $DIR"
 
 mkdir $DIR
-rm -f latest-collection
-ln -s $DIR latest-collection
+rm -f $DIR_PREFIX/latest-collection
+ln -s $DIR $DIR_PREFIX/latest-collection
 
 download_file() {
    REMOTE_FILEPATH=$1
@@ -108,6 +120,8 @@ download_file_from_blade() {
    # TODO: instead of double scp this would be nicer, but logging in to ir1 gives "ir@ir1: Permission denied (publickey)."
    #       with this we wouldn't need FM_IP
    # scp -v -o 'ProxyCommand sshpass -p welcome ssh irp871-c01 nc %h %p' -o PubkeyAuthentication=no -o PreferredAuthentications=password ir1:/logs/nfs.log .
+   # workaround idea: download the necessary key file from cluster to local machine, add to the keychain (ssh-add) and then with AgentForwarding we can
+   # already login to the blade
 
    # first copy the file from blade to FM, and then from FM to local machine
    sshpass -p welcome ssh \
@@ -157,7 +171,7 @@ for CLUSTER in $CLUSTERS; do
       FM_DIR=$DIR/${CLUSTER}_sup${FMNUM}_${FM_IP}
       echo "FM_IP = [$FM_IP], FM_DIR=[$FM_DIR]"
       mkdir $FM_DIR
-      # TODO: put this in function
+      # TODO: put these in function
       if [ ! -z "$DOWNLOAD_MIDDLEWARE_LOG" ]; then
          LOGFILES=$(sshpass -p welcome ssh \
             -o "UserKnownHostsFile=/dev/null" \
@@ -167,11 +181,6 @@ for CLUSTER in $CLUSTERS; do
          echo "LOGFILES=[$LOGFILES]"
          for LOGFILE in $LOGFILES; do
             download_file ir@$FM_IP:/logs/$LOGFILE $FM_DIR
-            # if it's zstd file, decompress it
-            if [ $(echo "$LOGFILE" | grep "\.zst$") ] ; then
-               zstd -d $FM_DIR/$LOGFILE
-               rm $FM_DIR/$LOGFILE
-            fi
          done
       fi
       if [ ! -z "$DOWNLOAD_PLATFORM_LOG" ]; then
@@ -183,11 +192,6 @@ for CLUSTER in $CLUSTERS; do
          echo "LOGFILES=[$LOGFILES]"
          for LOGFILE in $LOGFILES; do
             download_file ir@$FM_IP:/logs/$LOGFILE $FM_DIR
-            # if it's zstd file, decompress it
-            if [ $(echo "$LOGFILE" | grep "\.zst$") ] ; then
-               zstd -d $FM_DIR/$LOGFILE
-               rm $FM_DIR/$LOGFILE
-            fi
          done
       fi
       if [ ! -z "$DOWNLOAD_SYSTEM_LOG" ]; then
@@ -199,11 +203,6 @@ for CLUSTER in $CLUSTERS; do
          echo "LOGFILES=[$LOGFILES]"
          for LOGFILE in $LOGFILES; do
             download_file ir@$FM_IP:/logs/$LOGFILE $FM_DIR
-            # if it's zstd file, decompress it
-            if [ $(echo "$LOGFILE" | grep "\.zst$") ] ; then
-               zstd -d $FM_DIR/$LOGFILE
-               rm $FM_DIR/$LOGFILE
-            fi
          done
       fi
    done
@@ -234,10 +233,6 @@ for CLUSTER in $CLUSTERS; do
             ir@$CLUSTER "ssh ir$NUM \"cd /logs; ls nfs.log nfs.log.*\"")
          for LOGFILE in $LOGFILES; do
             download_file_from_blade $LOGFILE $BLADE_DIR $NUM $FM1_IP $CLUSTER
-            if [ $(echo "$LOGFILE" | grep "\.zst$") ] ; then
-               zstd -d $BLADE_DIR/$LOGFILE
-               rm $BLADE_DIR/$LOGFILE
-            fi
          done
       fi
       if [ ! -z "$DOWNLOAD_PLATFORM_BLADES_LOG" ]; then
@@ -248,10 +243,6 @@ for CLUSTER in $CLUSTERS; do
             ir@$CLUSTER "ssh ir$NUM \"cd /logs; ls platform.log*\"")
          for LOGFILE in $LOGFILES; do
             download_file_from_blade $LOGFILE $BLADE_DIR $NUM $FM1_IP $CLUSTER
-            if [ $(echo "$LOGFILE" | grep "\.zst$") ] ; then
-               zstd -d $BLADE_DIR/$LOGFILE
-               rm $BLADE_DIR/$LOGFILE
-            fi
          done
       fi
       if [ ! -z "$DOWNLOAD_SYSTEM_BLADES_LOG" ]; then
@@ -262,15 +253,14 @@ for CLUSTER in $CLUSTERS; do
             ir@$CLUSTER "ssh ir$NUM \"cd /logs; ls system.log*\"")
          for LOGFILE in $LOGFILES; do
             download_file_from_blade $LOGFILE $BLADE_DIR $NUM $FM1_IP $CLUSTER
-            if [ $(echo "$LOGFILE" | grep "\.zst$") ] ; then
-               zstd -d $BLADE_DIR/$LOGFILE
-               rm $BLADE_DIR/$LOGFILE
-            fi
          done
       fi
    done
 done
 
-cp ../ir_test.log latest-collection
+echo "decompressing every .zst file we downloaded in DIR=[$DIR] ..."
+find $DIR -name '*.zst' -exec sh -c 'zstd -d "{}"; rm -f "{}"' \;
+
+cp ir_test.log $DIR
 
 echo "Directory in which the logs are downloaded: $DIR"
