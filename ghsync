@@ -15,8 +15,8 @@ done
 branches=( \
    master \
    area/pasg \
-   rel4-1-x \
    rel4-3-x \
+   rel4-4-x \
 )
 
 for branch in ${branches[@]}
