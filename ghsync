@@ -4,10 +4,17 @@ RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 RESET=0
-while getopts ":r" option; do
+while getopts "sfr" option; do
    case $option in
+      s)
+         SYNC=1
+         ;;
+      f)
+         FETCH=1
+         ;;
       r)
          RESET=1
+         ;;
    esac
 done
 
@@ -15,21 +22,30 @@ done
 branches=( \
    master \
    area/pasg \
+   feature/encrypted_file_replication \
    rel4-3-x \
    rel4-4-x \
 )
 
-for branch in ${branches[@]}
-do
-   echo "syncing branch: [$branch]"
-   gh repo sync pure-forks/jlaz-iridium -b $branch
-done
+if [ "$SYNC" == "1" ]; then
+   for branch in ${branches[@]}
+   do
+      echo "--> syncing branch: [$branch]"
+      gh repo sync pure-forks/jlaz-iridium -b $branch
+   done
+   echo ""
+fi
 
-git fetch --prune origin
-git fetch --prune upstream ${branches[@]}
+if [ "$FETCH" == "1" ]; then
+   echo "--> fetching repos"
+   git fetch --prune origin
+   git fetch --prune upstream ${branches[@]}
+   echo ""
+fi
 
 if [ "$RESET" == "1" ]
 then
+   echo "--> resetting branches"
    for branch in ${branches[@]}
    do
       git rev-parse --verify $branch > /dev/null 2>&1
@@ -51,4 +67,5 @@ then
          fi
       fi
    done
+   echo ""
 fi
