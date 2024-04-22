@@ -1,7 +1,8 @@
 #! /bin/bash
-CLUSTERS=(irp871-c76 irp871-c77)
-printf -v CLUSTERS_JOINED_EXTRA_COMMA '%s,' "${CLUSTERS[@]}"
-CLUSTERS_JOINED="${CLUSTERS_JOINED_EXTRA_COMMA%,}"
+CLUSTERS_DEFAULT=(irp871-c76 irp871-c77)
+printf -v CLUSTERS_DEFAULT_JOINED_EXTRA_COMMA '%s,' "${CLUSTERS_DEFAULT[@]}"
+CLUSTERS_DEFAULT_JOINED="${CLUSTERS_DEFAULT_JOINED_EXTRA_COMMA%,}"
+SHA_DEFAULT="7a9ce3994b0a57efa68159b35405dd33b35f7cf3"
 
 retval_check () {
    RETVAL=$1
@@ -28,6 +29,10 @@ usage() {
    echo "  -l              clean logs (on FMs & blades: /logs/*)" 1>&2
    echo "  -t              running test" 1>&2
    echo "  -h              help" 1>&2
+   echo "  --sha=<sha>     sha of the commit to bootstrap to clusters (full sha needed)" 1>&2
+   echo "  --clusters=<clusters>    comma separated list of clusters to use for the above commands" 1>&2
+   echo "                           Note: some actions assume 2 clusters (eg. certificate exchange)" 1>&2
+   echo "                           Default: $CLUSTERS_DEFAULT_JOINED" 1>&2
    echo "" 1>&2
    echo "examples:" 1>&2
    echo "   for preparing a testbed for MW replication integration tests:" 1>&2
@@ -36,11 +41,23 @@ usage() {
    echo "      $0 -i -d -f" 1>&2
    echo "   running test:" 1>&2
    echo "      $0 -t" 1>&2
+   echo "   mixed version usage:" 1>&2
+   echo "      $0 -i --clusters=c1 --sha=abcd [-d]; $0 -i --clusters=c2 --sha=efgh [-d]; $0 --cluster=c1,c2 <other opts>" 1>&2
    exit 1
 }
 
-while getopts "idarceflth" o; do
-   case "${o}" in
+die() { echo "$*" >&2; exit 2; }
+needs_arg() { if [ -z "$OPTARG" ]; then die "No arg for --$OPT option"; fi; }
+
+while getopts "idarceflth-:" OPT; do
+   # support long options: https://stackoverflow.com/a/28466267/519360
+   if [ "$OPT" = "-" ]; then   # long option: reformulate OPT and OPTARG
+      OPT="${OPTARG%%=*}"       # extract long option name
+      OPTARG="${OPTARG#$OPT}"   # extract long option argument (may be empty)
+      OPTARG="${OPTARG#=}"      # if long option argument, remove assigning `=`
+      echo "long option detected: OPT=[$OPT], OPTARG=[$OPTARG]"
+   fi
+   case "$OPT" in
       i)
          INITIATE_CLUSTER=1
          ;;
@@ -68,44 +85,40 @@ while getopts "idarceflth" o; do
       t)
          RUN_TEST=1
          ;;
-      *)
-         usage
-         ;;
+      sha) needs_arg; SHA=$OPTARG ;;
+      clusters) needs_arg
+                CLUSTERS_JOINED=$OPTARG
+                CLUSTERS_STR=$(echo "$CLUSTERS_JOINED" | sed -e "s/,/ /g")
+                CLUSTERS=($CLUSTERS_STR)
+                ;;
+      *) usage ;;
    esac
 done
 shift $((OPTIND-1))
 
-SHA="7a9ce3994b0a57efa68159b35405dd33b35f7cf3"
-# SHA2=""
+if [ -z "$CLUSTERS_JOINED" ]; then
+   CLUSTERS_JOINED=$CLUSTERS_DEFAULT_JOINED
+   CLUSTERS=("${CLUSTERS_DEFAULT[@]}")
+fi
+echo -ne "Used clusters:\n   "
+for CLUSTER in ${CLUSTERS[@]}; do
+   echo -n " [$CLUSTER]"
+done
+echo
+
+if [ -z "$SHA" ]; then
+   SHA=$SHA_DEFAULT
+fi
+
 if [ "$INITIATE_CLUSTER" == "1" ]; then
-   if [ "$SHA2" == "" ]; then
-      echo "---> bootstrapping clusters [$CLUSTERS_JOINED] to sha [$SHA] <---"
-      time ./run ./tools/python/simctl sim \
-         -a $CLUSTERS_JOINED \
-         --skip-easim-check \
-         clean start \
-         --blades 3 \
-         --sha $SHA
-      retval_check $?
-   else
-      echo "---> bootstrapping clusters to different versions <---"
-      echo "---> bootstrapping cluster [${CLUSTERS[0]}] to sha [$SHA] <---"
-      time ./run ./tools/python/simctl sim \
-         -a ${CLUSTERS[0]} \
-         --skip-easim-check \
-         clean start \
-         --blades 3 \
-         --sha $SHA
-      retval_check $?
-      echo "---> bootstrapping cluster [${CLUSTERS[1]}] to sha [$SHA2] <---"
-      time ./run ./tools/python/simctl sim \
-         -a ${CLUSTERS[1]} \
-         --skip-easim-check \
-         clean start \
-         --blades 3 \
-         --sha $SHA2
-      retval_check $?
-   fi
+   echo "---> bootstrapping clusters [$CLUSTERS_JOINED] to sha [$SHA] <---"
+   time ./run ./tools/python/simctl sim \
+      -a $CLUSTERS_JOINED \
+      --skip-easim-check \
+      clean start \
+      --blades 3 \
+      --sha $SHA
+   retval_check $?
 fi
 
 if [ "$TREE_DEPLOY" == "1" ]; then
