@@ -2,7 +2,6 @@
 CLUSTERS_DEFAULT=(irp871-c76 irp871-c77)
 printf -v CLUSTERS_DEFAULT_JOINED_EXTRA_COMMA '%s,' "${CLUSTERS_DEFAULT[@]}"
 CLUSTERS_DEFAULT_JOINED="${CLUSTERS_DEFAULT_JOINED_EXTRA_COMMA%,}"
-SHA_DEFAULT="7a9ce3994b0a57efa68159b35405dd33b35f7cf3"
 
 retval_check () {
    RETVAL=$1
@@ -30,6 +29,8 @@ usage() {
    echo "  -t              running test" 1>&2
    echo "  -h              help" 1>&2
    echo "  --sha=<sha>     sha of the commit to bootstrap to clusters (full sha needed)" 1>&2
+   echo "  --branch=<branch>        the branch where the latest available sha shall be used" 1>&2
+   echo "                           if both --sha and --branch is specified, --sha is going to be used" 1>&2
    echo "  --clusters=<clusters>    comma separated list of clusters to use for the above commands" 1>&2
    echo "                           Note: some actions assume 2 clusters (eg. certificate exchange)" 1>&2
    echo "                           Default: $CLUSTERS_DEFAULT_JOINED" 1>&2
@@ -42,7 +43,9 @@ usage() {
    echo "   running test:" 1>&2
    echo "      $0 -t" 1>&2
    echo "   mixed version usage:" 1>&2
-   echo "      $0 -i --clusters=c1 --sha=abcd [-d]; $0 -i --clusters=c2 --sha=efgh [-d]; $0 --cluster=c1,c2 <other opts>" 1>&2
+   echo "      $0 -i --clusters=c1 --sha=abcd [-d]" 1>&2
+   echo "      $0 -i --clusters=c2 --sha=efgh [-d]" 1>&2
+   echo "      $0 --cluster=c1,c2 <other opts>" 1>&2
    exit 1
 }
 
@@ -86,11 +89,13 @@ while getopts "idarceflth-:" OPT; do
          RUN_TEST=1
          ;;
       sha) needs_arg; SHA=$OPTARG ;;
-      clusters) needs_arg
-                CLUSTERS_JOINED=$OPTARG
-                CLUSTERS_STR=$(echo "$CLUSTERS_JOINED" | sed -e "s/,/ /g")
-                CLUSTERS=($CLUSTERS_STR)
-                ;;
+      branch) needs_arg; BRANCH=$OPTARG ;;
+      clusters)
+         needs_arg
+         CLUSTERS_JOINED=$OPTARG
+         CLUSTERS_STR=$(echo "$CLUSTERS_JOINED" | sed -e "s/,/ /g")
+         CLUSTERS=($CLUSTERS_STR)
+         ;;
       *) usage ;;
    esac
 done
@@ -106,11 +111,18 @@ for CLUSTER in ${CLUSTERS[@]}; do
 done
 echo
 
-if [ -z "$SHA" ]; then
-   SHA=$SHA_DEFAULT
-fi
-
 if [ "$INITIATE_CLUSTER" == "1" ]; then
+
+   if [ -z "$SHA" ]; then
+      if [ -z "$BRANCH" ]; then
+         BRANCH="HEAD"
+      fi
+      SHA=$(artifactory_search.sh -l -b $BRANCH)
+      retval=$?
+      echo "artifactory_search.sh returned SHA=[$SHA] for BRANCH=[$BRANCH]"
+      retval_check $retval
+   fi
+
    echo "---> bootstrapping clusters [$CLUSTERS_JOINED] to sha [$SHA] <---"
    time ./run ./tools/python/simctl sim \
       -a $CLUSTERS_JOINED \
