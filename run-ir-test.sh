@@ -2,6 +2,7 @@
 CLUSTERS_DEFAULT=(irp871-c76 irp871-c77)
 printf -v CLUSTERS_DEFAULT_JOINED_EXTRA_COMMA '%s,' "${CLUSTERS_DEFAULT[@]}"
 CLUSTERS_DEFAULT_JOINED="${CLUSTERS_DEFAULT_JOINED_EXTRA_COMMA%,}"
+DEFAULT_DEPLOY_TARGETS="middleware,cpp_release,feature-flags-system,feature-flags-admin,pure-cli,etcd,admin,inuk,plugins,netconf,FF"
 
 retval_check () {
    RETVAL=$1
@@ -28,12 +29,15 @@ usage() {
    echo "  -l              clean logs (on FMs & blades: /logs/*)" 1>&2
    echo "  -t              running test" 1>&2
    echo "  -h              help" 1>&2
+   echo "  -x              temp: deleting hedghog fs+link and recreating it (with link)" 1>&2
    echo "  --sha=<sha>     sha of the commit to bootstrap to clusters (full sha needed)" 1>&2
    echo "  --branch=<branch>        the branch where the latest available sha shall be used" 1>&2
    echo "                           if both --sha and --branch is specified, --sha is going to be used" 1>&2
    echo "  --clusters=<clusters>    comma separated list of clusters to use for the above commands" 1>&2
    echo "                           Note: some actions assume 2 clusters (eg. certificate exchange)" 1>&2
-   echo "                           Default: $CLUSTERS_DEFAULT_JOINED" 1>&2
+   echo "  --deploy-targets=<targets>    comma separated list of targets to tree deploy" 1>&2
+   echo "                                for the list of targets see: ./run tools/remote/tree_deploy.py -h" 1>&2
+   echo "                                Default: $DEFAULT_DEPLOY_TARGETS" 1>&2
    echo "" 1>&2
    echo "examples:" 1>&2
    echo "   for preparing a testbed for MW replication integration tests:" 1>&2
@@ -52,7 +56,7 @@ usage() {
 die() { echo "$*" >&2; exit 2; }
 needs_arg() { if [ -z "$OPTARG" ]; then die "No arg for --$OPT option"; fi; }
 
-while getopts "idarceflth-:" OPT; do
+while getopts "idarcefltxh-:" OPT; do
    # support long options: https://stackoverflow.com/a/28466267/519360
    if [ "$OPT" = "-" ]; then   # long option: reformulate OPT and OPTARG
       OPT="${OPTARG%%=*}"       # extract long option name
@@ -88,6 +92,7 @@ while getopts "idarceflth-:" OPT; do
       t)
          RUN_TEST=1
          ;;
+      x) X_RECREATE_HEDGEHOG=1 ;;
       sha) needs_arg; SHA=$OPTARG ;;
       branch) needs_arg; BRANCH=$OPTARG ;;
       clusters)
@@ -96,6 +101,7 @@ while getopts "idarceflth-:" OPT; do
          CLUSTERS_STR=$(echo "$CLUSTERS_JOINED" | sed -e "s/,/ /g")
          CLUSTERS=($CLUSTERS_STR)
          ;;
+      deploy-targets) needs_arg; DEPLOY_TARGETS=$OPTARG ;;
       *) usage ;;
    esac
 done
@@ -109,6 +115,12 @@ echo -ne "Used clusters:\n   "
 for CLUSTER in ${CLUSTERS[@]}; do
    echo -n " [$CLUSTER]"
 done
+echo
+
+if [ -z "$DEPLOY_TARGETS" ]; then
+   DEPLOY_TARGETS=$DEFAULT_DEPLOY_TARGETS
+fi
+date
 echo
 
 if [ "$INITIATE_CLUSTER" == "1" ]; then
@@ -134,21 +146,46 @@ if [ "$INITIATE_CLUSTER" == "1" ]; then
 fi
 
 if [ "$TREE_DEPLOY" == "1" ]; then
+   git show --quiet
+   git status
+   rm -f deployed
+   echo "# vim: ft=diff" > deployed
+   date >> deployed
+   echo "---> targets to deploy: DEPLOY_TARGETS=[$DEPLOY_TARGETS] <---" >> deployed
+   echo "---> git show <---" >> deployed
+   git show --quiet >> deployed
+   echo "---> git status <---" >> deployed
+   git status >> deployed
+   echo "---> git diff <---" >> deployed
+   git diff >> deployed
+
+   echo "---> targets to deploy: DEPLOY_TARGETS=[$DEPLOY_TARGETS] <---"
    for CLUSTER in ${CLUSTERS[@]}; do
-      echo "---> tree deploy to cluster [$CLUSTER]: MW <---"
-      time ./run tools/remote/tree_deploy.py -v -a $CLUSTER -sa middleware
-      retval_check $?
-      echo "---> tree deploy to cluster [$CLUSTER]: NFS <---"
-      time ./run tools/remote/tree_deploy.py -v -a $CLUSTER -na cpp_release
-      retval_check $?
-      echo "---> tree deploy to cluster [$CLUSTER]: FF <---"
-      time ./run tools/remote/tree_deploy.py -v -a $CLUSTER -sa -na feature-flags-system feature-flags-admin pure-cli etcd admin plugins netconf
-      retval_check $?
+      if [ ! -z "$(echo $DEPLOY_TARGETS | grep middleware)" ]; then
+         echo "---> tree deploy to cluster [$CLUSTER]: MW <---"
+         time ./run tools/remote/tree_deploy.py -v -a $CLUSTER -sa middleware
+         retval_check $?
+      fi
+      if [ ! -z "$(echo $DEPLOY_TARGETS | grep cpp_release)" ]; then
+         echo "---> tree deploy to cluster [$CLUSTER]: NFS <---"
+         time ./run tools/remote/tree_deploy.py -v -a $CLUSTER -na cpp_release
+         retval_check $?
+      fi
+      if [ ! -z "$(echo $DEPLOY_TARGETS | grep FF)" ]; then
+         echo "---> tree deploy to cluster [$CLUSTER]: FF <---"
+         time ./run tools/remote/tree_deploy.py -v -a $CLUSTER -sa -na feature-flags-system feature-flags-admin pure-cli etcd admin plugins netconf
+         retval_check $?
+      fi
+      if [ ! -z "$(echo $DEPLOY_TARGETS | grep inuk)" ]; then
+         echo "---> tree deploy to cluster [$CLUSTER]: inuk <---"
+         time ./run tools/remote/tree_deploy.py -v -a $CLUSTER -sa -na inuk
+         retval_check $?
+      fi
       echo "---> restarting cluster [$CLUSTER] <--- [$(date)]"
       time ./run tools/remote/restart_sw.py --wait -na -sa restart -a $CLUSTER
       retval_check $?
    done
-   echo "---> sleeping for 20 sec <----"
+   echo "---> sleeping for 20 sec <---"
    sleep 20
 fi
 
@@ -271,6 +308,57 @@ if [ "$CLEAN_LOGS" == "1" ]; then
    done
 fi
 
+if [ "$X_RECREATE_HEDGEHOG" == "1" ]; then
+   FSNAME="hedgehog"
+   FSINFO=$(sshpass -p welcome ssh $SSHARGS \
+      ir@${CLUSTERS[0]} \
+      "purefs list --notitle --csv $FSNAME")
+   echo "---> FSINFO=[$FSINFO] <---- [$(date)]"
+   if [ -z "$FSINFO" ]; then
+      echo "FSNAME=[$FSNAME] does not exist"
+      exit 1
+   fi
+   echo "---> removing replica link <---- [$(date)]"
+   sshpass -p welcome ssh $SSHARGS \
+      ir@${CLUSTERS[0]} \
+      "purefs replica-link delete $FSNAME --remote ${CLUSTERS[1]} --cancel-in-progress-transfers"
+   if [ ! -z "$(echo $FSINFO | cut -d',' -f7)" ]; then
+      echo "---> removing protocol flag from fs on source: FSNAME=[$FSNAME] <---- [$(date)]"
+      sshpass -p welcome ssh $SSHARGS \
+         ir@${CLUSTERS[0]} \
+         "purefs remove --protocol nfsv3 $FSNAME"
+      ADD_BACK_PROTOCOL=1
+   fi
+   echo "---> removing fs on source: FSNAME=[$FSNAME] <---- [$(date)]"
+   sshpass -p welcome ssh $SSHARGS \
+      ir@${CLUSTERS[0]} \
+      "purefs destroy $FSNAME; purefs eradicate $FSNAME"
+   retval_check $?
+   echo "---> waiting for heartbeat to remove link on target <---- [$(date)]"
+   sleep 12
+   echo "---> removing fs on target: FSNAME=[$FSNAME] <---- [$(date)]"
+   sshpass -p welcome ssh $SSHARGS \
+      ir@${CLUSTERS[1]} \
+      "purefs destroy $FSNAME; purefs eradicate $FSNAME"
+   retval_check $?
+   echo "---> creating fs on source: FSNAME=[$FSNAME] <---- [$(date)]"
+   sshpass -p welcome ssh $SSHARGS \
+      ir@${CLUSTERS[0]} \
+      "purefs create $FSNAME"
+   retval_check $?
+   if [ "$ADD_BACK_PROTOCOL" == "1" ]; then
+      echo "---> adding protocol flag to fs on source: FSNAME=[$FSNAME] <---- [$(date)]"
+      sshpass -p welcome ssh $SSHARGS \
+         ir@${CLUSTERS[0]} \
+         "purefs add --protocol nfsv3 $FSNAME"
+   fi
+   echo "---> creating replica link <---- [$(date)]"
+   sshpass -p welcome ssh $SSHARGS \
+      ir@${CLUSTERS[0]} \
+      "purefs replica-link create --remote ${CLUSTERS[1]} $FSNAME"
+   retval_check $?
+fi
+
 if [ "$RUN_TEST" == "1" ]; then
    echo "---> running the test <---- [$(date)]"
    PS_FEATURE_FLAG_ENCRYPTED_FILE_REPLICATION=true time ./run ir_test/exec_test \
@@ -282,7 +370,7 @@ if [ "$RUN_TEST" == "1" ]; then
    TEST_RESULT=$?
 
    echo "---> collecting the logs <----"
-   time collect.sh -d triage -c $CLUSTERS_JOINED -l platform,middleware,nfs,platform_blades,system,system_blades
+   time collect.sh -d triage -c $CLUSTERS_JOINED -l platform,middleware,nfs,platform_blades,system,system_blades -n 2
 
    RED='\033[0;31m'
    GREEN='\033[0;32m'
