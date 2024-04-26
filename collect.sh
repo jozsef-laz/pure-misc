@@ -14,6 +14,7 @@ usage() {
    echo "                      - nfs: nfs.log of blades" 1>&2
    echo "                      - system: system.log of FMs" 1>&2
    echo "                      - system_blades: system.log of blades" 1>&2
+   echo "                      - atop_blades: atop measurements on blades" 1>&2
    echo "                     default value: \"$LOGTYPES_DEFAULT_ARG\"" 1>&2
    echo "  -d <dir path>   relative path where log pack directory shall be created" 1>&2
    echo "                     (ex. \"path/to/downloads\", then logs will be under \"path/to/downloads/irpXXX-cXX_2024-01-30-T17-00-37)" 1>&2
@@ -69,6 +70,7 @@ DOWNLOAD_PLATFORM_BLADES_LOG=$(echo "$LOGTYPES_ARG" | grep "platform_blades")
 DOWNLOAD_NFS_LOG=$(echo "$LOGTYPES_ARG" | grep "nfs")
 DOWNLOAD_SYSTEM_LOG=$(echo "$LOGTYPES_ARG" | grep "system")
 DOWNLOAD_SYSTEM_BLADES_LOG=$(echo "$LOGTYPES_ARG" | grep "system_blades")
+DOWNLOAD_ATOP_BLADES_LOG=$(echo "$LOGTYPES_ARG" | grep "atop_blades")
 
 #declare -A LOGNAME_PATTERN=( \
 #   ["middleware"]="middleware.log" \
@@ -121,7 +123,11 @@ download_file_from_blade() {
    BLADENUM=$3
    FM_IP=$4
    CLUSTER=$5
-   echo -n "Downloading: Cluster=[$CLUSTER] Ip=[$FM_IP] BLADENUM=[$BLADENUM] LOGFILE=[$LOGFILE] ..."
+   DIR_ON_BLADE=$6
+   if [ -z "$DIR_ON_BLADE" ]; then
+      DIR_ON_BLADE="/logs"
+   fi
+   echo -n "Downloading: Cluster=[$CLUSTER] Ip=[$FM_IP] BLADENUM=[$BLADENUM] LOGFILE=[$LOGFILE] DIR_ON_BLADE=[$DIR_ON_BLADE] ..."
 
    # TODO: instead of double scp this would be nicer, but logging in to ir1 gives "ir@ir1: Permission denied (publickey)."
    #       with this we wouldn't need FM_IP
@@ -132,16 +138,18 @@ download_file_from_blade() {
    # first copy the file from blade to FM, and then from FM to local machine
    sshpass -p welcome ssh $SSH_PARAMS \
       ir@$FM_IP \
-      "rm -f $LOGFILE; scp ir$BLADENUM:/logs/$LOGFILE ."
+      "rm -f $LOGFILE; scp ir$BLADENUM:$DIR_ON_BLADE/$LOGFILE ."
    RETVAL=$?
    if [ $RETVAL != 0 ]; then
       echo " Error in scp #1: RETVAL=$RETVAL"
+      return
    fi
    sshpass -p welcome scp $SSH_PARAMS \
       ir@$FM_IP:/home/ir/$LOGFILE $BLADE_DIR
    RETVAL=$?
    if [ $RETVAL != 0 ]; then
       echo " Error in scp #2: RETVAL=$RETVAL"
+      return
    fi
    # cleanup
    sshpass -p welcome ssh $SSH_PARAMS \
@@ -149,6 +157,7 @@ download_file_from_blade() {
    RETVAL=$?
    if [ $RETVAL != 0 ]; then
       echo " Error in cleanup: RETVAL=$RETVAL"
+      return
    fi
    # TODO: proper log about what happened
    echo " Done"
@@ -225,6 +234,9 @@ for CLUSTER in $CLUSTERS; do
          for LOGFILE in $LOGFILES; do
             download_file_from_blade $LOGFILE $BLADE_DIR $NUM $FM1_IP $CLUSTER
          done
+      fi
+      if [ ! -z "$DOWNLOAD_ATOP_BLADES_LOG" ]; then
+         download_file_from_blade alma.raw $BLADE_DIR $NUM $FM1_IP $CLUSTER /home/ir
       fi
    done
 done
