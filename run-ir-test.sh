@@ -310,48 +310,62 @@ fi
 
 if [ "$X_RECREATE_HEDGEHOG" == "1" ]; then
    FSNAME="hedgehog"
+   echo "---> are there any replica links? <---- [$(date)]"
+   REPLICA_LINK_LIST=$(sshpass -p welcome ssh $SSHARGS \
+      ir@${CLUSTERS[0]} \
+      "purefs replica-link list $FSNAME")
+   if [ ! -z "$(echo $REPLICA_LINK_LIST | grep $FSNAME)" ]; then
+      echo "---> removing replica link <---- [$(date)]"
+      sshpass -p welcome ssh $SSHARGS \
+         ir@${CLUSTERS[0]} \
+         "purefs replica-link delete $FSNAME --remote ${CLUSTERS[1]} --cancel-in-progress-transfers"
+      echo "---> waiting for heartbeat to remove link on target <---- [$(date)]"
+      sleep 15
+   fi
+
    FSINFO=$(sshpass -p welcome ssh $SSHARGS \
       ir@${CLUSTERS[0]} \
       "purefs list --notitle --csv $FSNAME")
-   echo "---> FSINFO=[$FSINFO] <---- [$(date)]"
-   if [ -z "$FSINFO" ]; then
-      echo "FSNAME=[$FSNAME] does not exist"
-      exit 1
-   fi
+   echo -e "---> FSINFO=[\n$FSINFO\n] <---- [$(date)]"
    echo "---> removing replica link <---- [$(date)]"
    sshpass -p welcome ssh $SSHARGS \
       ir@${CLUSTERS[0]} \
       "purefs replica-link delete $FSNAME --remote ${CLUSTERS[1]} --cancel-in-progress-transfers"
-   if [ ! -z "$(echo $FSINFO | cut -d',' -f7)" ]; then
-      echo "---> removing protocol flag from fs on source: FSNAME=[$FSNAME] <---- [$(date)]"
-      sshpass -p welcome ssh $SSHARGS \
-         ir@${CLUSTERS[0]} \
-         "purefs remove --protocol nfsv3 $FSNAME"
-      ADD_BACK_PROTOCOL=1
+   if [ ! -z "$(echo $FSINFO | grep $FSNAME)" ]; then
+      if [ ! -z "$(echo $FSINFO | cut -d',' -f7)" ]; then
+         echo "---> removing protocol flag from fs on source: FSNAME=[$FSNAME] <---- [$(date)]"
+         sshpass -p welcome ssh $SSHARGS \
+            ir@${CLUSTERS[0]} \
+            "purefs remove --protocol nfsv3 $FSNAME"
+      fi
+      echo "---> removing fs on source: FSNAME=[$FSNAME] <---- [$(date)]"
+       sshpass -p welcome ssh $SSHARGS \
+          ir@${CLUSTERS[0]} \
+         "purefs destroy $FSNAME; purefs eradicate $FSNAME"
+      retval_check $?
    fi
-   echo "---> removing fs on source: FSNAME=[$FSNAME] <---- [$(date)]"
-   sshpass -p welcome ssh $SSHARGS \
-      ir@${CLUSTERS[0]} \
-      "purefs destroy $FSNAME; purefs eradicate $FSNAME"
-   retval_check $?
-   echo "---> waiting for heartbeat to remove link on target <---- [$(date)]"
-   sleep 12
-   echo "---> removing fs on target: FSNAME=[$FSNAME] <---- [$(date)]"
-   sshpass -p welcome ssh $SSHARGS \
-      ir@${CLUSTERS[1]} \
-      "purefs destroy $FSNAME; purefs eradicate $FSNAME"
-   retval_check $?
+
+   FSINFO_1=$(sshpass -p welcome ssh $SSHARGS \
+       ir@${CLUSTERS[1]} \
+      "purefs list --notitle --csv $FSNAME")
+   if [ ! -z "$(echo $FSINFO_1 | grep $FSNAME)" ]; then
+      echo "---> removing fs on target: FSNAME=[$FSNAME] <---- [$(date)]"
+      sshpass -p welcome ssh $SSHARGS \
+         ir@${CLUSTERS[1]} \
+         "purefs destroy $FSNAME; purefs eradicate $FSNAME"
+      retval_check $?
+   fi
+
    echo "---> creating fs on source: FSNAME=[$FSNAME] <---- [$(date)]"
    sshpass -p welcome ssh $SSHARGS \
       ir@${CLUSTERS[0]} \
       "purefs create $FSNAME"
    retval_check $?
-   if [ "$ADD_BACK_PROTOCOL" == "1" ]; then
-      echo "---> adding protocol flag to fs on source: FSNAME=[$FSNAME] <---- [$(date)]"
-      sshpass -p welcome ssh $SSHARGS \
-         ir@${CLUSTERS[0]} \
-         "purefs add --protocol nfsv3 $FSNAME"
-   fi
+   echo "---> adding protocol flag to fs on source: FSNAME=[$FSNAME] <---- [$(date)]"
+   sshpass -p welcome ssh $SSHARGS \
+      ir@${CLUSTERS[0]} \
+      "purefs add --protocol nfsv3 $FSNAME"
+   retval_check $?
    echo "---> creating replica link <---- [$(date)]"
    sshpass -p welcome ssh $SSHARGS \
       ir@${CLUSTERS[0]} \
