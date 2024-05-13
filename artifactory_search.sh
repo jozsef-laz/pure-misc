@@ -1,10 +1,4 @@
 #! /bin/bash
-#
-# Usage: ./artifactory_search.sh <branch>
-#
-# where <branch> can be:
-#  - anything git log understands, eg. branchname, commit sha, etc.
-#  - empty, in this case HEAD is condsidered as the base commit for search
 
 RCol='\e[0m'
 
@@ -48,7 +42,7 @@ SHAS=$(git log -$NUM_OF_COMMITS_TO_CHECK --pretty=format:'%H' $BRANCH)
 if [ "$LATEST_SHA" == "1" ]; then
    for SHA in $SHAS
    do
-      LINK="https://pure-artifactory.dev.purestorage.com/artifactory/iridium-artifacts/build/$SHA/ubuntu1804/"
+      LINK="https://pure-artifactory.dev.purestorage.com/artifactory/iridium-artifacts/build/$SHA/ubuntu2204/"
       HTTP_RESULT=$(wget --spider --server-response $LINK 2>&1 | awk '/^  HTTP/{print $2}')
       if [ "$HTTP_RESULT" == "200" ]; then
          echo -n "$SHA"
@@ -62,7 +56,7 @@ fi
 git --no-pager log --graph --decorate -$NUM_OF_COMMITS_TO_CHECK --oneline --abbrev-commit $BRANCH
 for SHA in $SHAS
 do
-   LINK="https://pure-artifactory.dev.purestorage.com/artifactory/iridium-artifacts/build/$SHA/ubuntu1804/"
+   LINK="https://pure-artifactory.dev.purestorage.com/artifactory/iridium-artifacts/build/$SHA/ubuntu2204/"
    HTTP_RESULT=$(wget --spider --server-response $LINK 2>&1 | awk '/^  HTTP/{print $2}')
    if [ "$HTTP_RESULT" == "200" ]
    then
