@@ -102,7 +102,8 @@ while getopts "idarcefltxh-:" OPT; do
          CLUSTERS=($CLUSTERS_STR)
          ;;
       deploy-targets) needs_arg; DEPLOY_TARGETS=$OPTARG ;;
-      *) usage ;;
+      h) usage ;;
+      *) die "Error: Unknown option detected: [$OPT], use option -h to see options";;
    esac
 done
 shift $((OPTIND-1))
