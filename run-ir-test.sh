@@ -157,6 +157,8 @@ if [ "$TREE_DEPLOY" == "1" ]; then
    git show --quiet >> deployed
    echo "---> git status <---" >> deployed
    git status >> deployed
+   echo "---> git diff --staged <---" >> deployed
+   git diff --staged >> deployed
    echo "---> git diff <---" >> deployed
    git diff >> deployed
 
