@@ -124,8 +124,7 @@ fi
 date
 echo
 
-if [ "$INITIATE_CLUSTER" == "1" ]; then
-
+if [ "$INITIATE_CLUSTER" == "1" ] || [ "$RUN_TEST" == "1" ]; then
    if [ -z "$SHA" ]; then
       if [ -z "$BRANCH" ]; then
          BRANCH="HEAD"
@@ -135,7 +134,9 @@ if [ "$INITIATE_CLUSTER" == "1" ]; then
       echo "artifactory_search.sh returned SHA=[$SHA] for BRANCH=[$BRANCH]"
       retval_check $retval
    fi
+fi
 
+if [ "$INITIATE_CLUSTER" == "1" ]; then
    echo "---> bootstrapping clusters [$CLUSTERS_JOINED] to sha [$SHA] <---"
    time ./run ./tools/python/simctl sim \
       -a $CLUSTERS_JOINED \
@@ -344,7 +345,7 @@ if [ "$X_RECREATE_HEDGEHOG" == "1" ]; then
       echo "---> removing fs on source: FSNAME=[$FSNAME] <---- [$(date)]"
        sshpass -p welcome ssh $SSHARGS \
           ir@${CLUSTERS[0]} \
-         "purefs destroy $FSNAME; purefs eradicate $FSNAME"
+         "purefs destroy --delete-link-on-eradication $FSNAME; purefs eradicate $FSNAME"
       retval_check $?
    fi
 
@@ -377,16 +378,25 @@ if [ "$X_RECREATE_HEDGEHOG" == "1" ]; then
 fi
 
 if [ "$RUN_TEST" == "1" ]; then
-   echo "---> running the test <---- [$(date)]"
-   PS_FEATURE_FLAG_ENCRYPTED_FILE_REPLICATION=true time ./run ir_test/exec_test \
-      --update_initiators=0 \
-      -v \
+   echo "---> checking  <--- [$(date)]"
+   ( cd /home/ir/work/initiator_tools
+      if [ ! -f initiator_tools-$SHA-1404.tar.gz ]; then
+         pure_artifacts fetch --path build/$SHA/ubuntu1404 initiator_tools.tar.gz
+         retval_check $?
+         mv initiator_tools.tar.gz initiator_tools-$SHA-1404.tar.gz
+      fi
+   )
+   echo "---> running the test <--- [$(date)]"
+   # PS_FEATURE_FLAG_ENCRYPTED_FILE_REPLICATION=true time ./run ir_test/exec_test \
+   AD_TEST_DOMAINS="dc=ir-jad2019,dc=local" time ./run ir_test/exec_test \
+      --initiator-tools=/home/ir/work/initiator_tools/initiator_tools-$SHA-1404.tar.gz \
+      --verbose \
       --config ${CLUSTERS[0]} \
-      ir_test/functional/replication/test_replication_encryption.py \
-      -k test_fb_to_fb_secure_repl_nfsd_traffic
+      ir_test/functional/replication/replication_throttling.py \
+      -k test_throttling_smoke
    TEST_RESULT=$?
 
-   echo "---> collecting the logs <----"
+   echo "---> collecting the logs <---"
    time collect.sh -d triage -c $CLUSTERS_JOINED -l platform,middleware,nfs,platform_blades,system,system_blades -n 2
 
    RED='\033[0;31m'
