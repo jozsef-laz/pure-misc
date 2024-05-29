@@ -54,16 +54,22 @@ then
          echo -e "no such branch: [$branch], skipping..."
          continue
       fi
-      if [ "$(git branch --show-current)" == "$branch" ]
+      if [ "$(git show --pretty=format:%h $branch)" == "$(git show --pretty=format:%h origin/$branch)" ]
       then
-         echo -e "${RED}not resetting branch: [$branch], because we're on this branch\n" \
-            "please merge origin or upstream manually${NC}"
+         echo "[$branch] already up-to-date with origin, continuing..."
+         continue
       else
-         echo "resetting branch: [$branch]"
-         git branch --force $branch origin/$branch
-         if [ "$?" != "0" ]
+         if [ "$(git branch --show-current)" == "$branch" ]
          then
-            echo -e "${RED}resetting branch failed${NC}"
+            echo -e "${RED}not resetting branch: [$branch], because we're on this branch\n" \
+               "please merge origin or upstream manually${NC}"
+         else
+            echo "resetting branch: [$branch]"
+            git branch --force $branch origin/$branch
+            if [ "$?" != "0" ]
+            then
+               echo -e "${RED}resetting branch failed${NC}"
+            fi
          fi
       fi
    done

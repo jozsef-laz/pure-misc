@@ -49,7 +49,7 @@ if [ "$LATEST_SHA" == "1" ]; then
          exit 0
       fi
    done
-   echo "Error: Could not find any available sha in the last $NUM_OF_COMMITS_TO_CHECK shas."
+   >&2 echo "Error: Could not find any available sha in the last $NUM_OF_COMMITS_TO_CHECK shas."
    exit 1
 fi
 
