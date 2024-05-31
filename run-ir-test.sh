@@ -235,7 +235,7 @@ if [ "$CREATE_REPLICATION_VIP" == "1" ]; then
 fi
 
 if [ "$CONNECT_ARRAYS" == "1" ]; then
-   echo "---> connecting arrays <----"
+   echo "---> connecting arrays <---"
    CONNECTION_KEY=$(sshpass -p welcome ssh $SSHARGS \
       ir@${CLUSTERS[1]} \
       "purearray create --connection-key" | tail -n 1)
@@ -249,7 +249,7 @@ if [ "$CONNECT_ARRAYS" == "1" ]; then
 fi
 
 if [ "$EXCHANGE_CERTIFICATES" == "1" ]; then
-   echo "---> downloading certificates <----"
+   echo "---> downloading certificates <---"
    for CLUSTER in ${CLUSTERS[@]}; do
       echo "CLUSTER = [$CLUSTER]"
       sshpass -p welcome ssh $SSHARGS \
@@ -260,29 +260,36 @@ if [ "$EXCHANGE_CERTIFICATES" == "1" ]; then
          ir@$CLUSTER:/home/ir/global-$CLUSTER.crt .
       retval_check $?
    done
-   echo "---> uploading certificates <----"
+   echo "---> uploading certificates <---"
    for NUM in 0 1; do
       # uploading SRC cluster's certificate to TRG cluster
       OTHER_NUM=$(((NUM+1)%2))
       SRC=${CLUSTERS[$NUM]}
       TRG=${CLUSTERS[$OTHER_NUM]}
       echo "NUM=[$NUM], SRC=[$SRC], TRG=[$TRG]"
-      sshpass -p welcome scp $SSHARGS \
-         global-$SRC.crt ir@$TRG:/home/ir
-      retval_check $?
-      sshpass -p welcome ssh $SSHARGS \
-         ir@$TRG \
-         "cat global-$SRC.crt | purecert create --ca-certificate global-$SRC"
-      retval_check $?
-      sshpass -p welcome ssh $SSHARGS \
-         ir@$TRG \
-         "purecert add --group _default_replication_certs global-$SRC"
-      retval_check $?
+      CERTS=$(sshpass -p welcome ssh $SSHARGS \
+         ir@${TRG} \
+         "purecert list")
+      if [ -z "$(echo $CERTS | grep global-$SRC)" ]; then
+         sshpass -p welcome scp $SSHARGS \
+            global-$SRC.crt ir@$TRG:/home/ir
+         retval_check $?
+         sshpass -p welcome ssh $SSHARGS \
+            ir@$TRG \
+            "cat global-$SRC.crt | purecert create --ca-certificate global-$SRC"
+         retval_check $?
+         sshpass -p welcome ssh $SSHARGS \
+            ir@$TRG \
+            "purecert add --group _default_replication_certs global-$SRC"
+         retval_check $?
+      else
+         echo "---> global-$SRC.crt already exists on TRG=[$TRG], skipping... <---"
+      fi
    done
 fi
 
 if [ "$SET_FEATURE_FLAGS" == "1" ]; then
-   echo "---> turning on feature flags <---- [$(date)]"
+   echo "---> turning on feature flags <--- [$(date)]"
    for CLUSTER in ${CLUSTERS[@]}; do
       echo "CLUSTER = [$CLUSTER]"
       sshpass -p welcome ssh $SSHARGS \
@@ -297,12 +304,12 @@ if [ "$SET_FEATURE_FLAGS" == "1" ]; then
       time ./run tools/remote/restart_sw.py --wait -na -sa restart -a $CLUSTER
       retval_check $?
    done
-   echo "---> sleeping for 20 sec <----"
+   echo "---> sleeping for 20 sec <---"
    sleep 20
 fi
 
 if [ "$CLEAN_LOGS" == "1" ]; then
-   echo "---> cleaning logs <---- [$(date)]"
+   echo "---> cleaning logs <--- [$(date)]"
    for CLUSTER in ${CLUSTERS[@]}; do
       echo "CLUSTER = [$CLUSTER]"
       sshpass -p welcome ssh $SSHARGS \
@@ -314,35 +321,35 @@ fi
 
 if [ "$X_RECREATE_HEDGEHOG" == "1" ]; then
    FSNAME="hedgehog"
-   echo "---> are there any replica links? <---- [$(date)]"
+   echo "---> are there any replica links? <--- [$(date)]"
    REPLICA_LINK_LIST=$(sshpass -p welcome ssh $SSHARGS \
       ir@${CLUSTERS[0]} \
       "purefs replica-link list $FSNAME")
    if [ ! -z "$(echo $REPLICA_LINK_LIST | grep $FSNAME)" ]; then
-      echo "---> removing replica link <---- [$(date)]"
+      echo "---> removing replica link <--- [$(date)]"
       sshpass -p welcome ssh $SSHARGS \
          ir@${CLUSTERS[0]} \
          "purefs replica-link delete $FSNAME --remote ${CLUSTERS[1]} --cancel-in-progress-transfers"
-      echo "---> waiting for heartbeat to remove link on target <---- [$(date)]"
+      echo "---> waiting for heartbeat to remove link on target <--- [$(date)]"
       sleep 15
    fi
 
    FSINFO=$(sshpass -p welcome ssh $SSHARGS \
       ir@${CLUSTERS[0]} \
       "purefs list --notitle --csv $FSNAME")
-   echo -e "---> FSINFO=[\n$FSINFO\n] <---- [$(date)]"
-   echo "---> removing replica link <---- [$(date)]"
+   echo -e "---> FSINFO=[\n$FSINFO\n] <--- [$(date)]"
+   echo "---> removing replica link <--- [$(date)]"
    sshpass -p welcome ssh $SSHARGS \
       ir@${CLUSTERS[0]} \
       "purefs replica-link delete $FSNAME --remote ${CLUSTERS[1]} --cancel-in-progress-transfers"
    if [ ! -z "$(echo $FSINFO | grep $FSNAME)" ]; then
       if [ ! -z "$(echo $FSINFO | cut -d',' -f7)" ]; then
-         echo "---> removing protocol flag from fs on source: FSNAME=[$FSNAME] <---- [$(date)]"
+         echo "---> removing protocol flag from fs on source: FSNAME=[$FSNAME] <--- [$(date)]"
          sshpass -p welcome ssh $SSHARGS \
             ir@${CLUSTERS[0]} \
             "purefs remove --protocol nfsv3 $FSNAME"
       fi
-      echo "---> removing fs on source: FSNAME=[$FSNAME] <---- [$(date)]"
+      echo "---> removing fs on source: FSNAME=[$FSNAME] <--- [$(date)]"
        sshpass -p welcome ssh $SSHARGS \
           ir@${CLUSTERS[0]} \
          "purefs destroy --delete-link-on-eradication $FSNAME; purefs eradicate $FSNAME"
@@ -353,24 +360,24 @@ if [ "$X_RECREATE_HEDGEHOG" == "1" ]; then
        ir@${CLUSTERS[1]} \
       "purefs list --notitle --csv $FSNAME")
    if [ ! -z "$(echo $FSINFO_1 | grep $FSNAME)" ]; then
-      echo "---> removing fs on target: FSNAME=[$FSNAME] <---- [$(date)]"
+      echo "---> removing fs on target: FSNAME=[$FSNAME] <--- [$(date)]"
       sshpass -p welcome ssh $SSHARGS \
          ir@${CLUSTERS[1]} \
          "purefs destroy $FSNAME; purefs eradicate $FSNAME"
       retval_check $?
    fi
 
-   echo "---> creating fs on source: FSNAME=[$FSNAME] <---- [$(date)]"
+   echo "---> creating fs on source: FSNAME=[$FSNAME] <--- [$(date)]"
    sshpass -p welcome ssh $SSHARGS \
       ir@${CLUSTERS[0]} \
       "purefs create $FSNAME"
    retval_check $?
-   echo "---> adding protocol flag to fs on source: FSNAME=[$FSNAME] <---- [$(date)]"
+   echo "---> adding protocol flag to fs on source: FSNAME=[$FSNAME] <--- [$(date)]"
    sshpass -p welcome ssh $SSHARGS \
       ir@${CLUSTERS[0]} \
       "purefs add --protocol nfsv3 $FSNAME"
    retval_check $?
-   echo "---> creating replica link <---- [$(date)]"
+   echo "---> creating replica link <--- [$(date)]"
    sshpass -p welcome ssh $SSHARGS \
       ir@${CLUSTERS[0]} \
       "purefs replica-link create --remote ${CLUSTERS[1]} $FSNAME"
