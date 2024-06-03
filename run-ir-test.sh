@@ -38,6 +38,7 @@ usage() {
    echo "  --deploy-targets=<targets>    comma separated list of targets to tree deploy" 1>&2
    echo "                                for the list of targets see: ./run tools/remote/tree_deploy.py -h" 1>&2
    echo "                                Default: $DEFAULT_DEPLOY_TARGETS" 1>&2
+   echo "  --only-clean    when used with -x, hedghog fs+link will be only cleaned, not recreated" 1>&2
    echo "" 1>&2
    echo "examples:" 1>&2
    echo "   for preparing a testbed for MW replication integration tests:" 1>&2
@@ -102,6 +103,7 @@ while getopts "idarcefltxh-:" OPT; do
          CLUSTERS=($CLUSTERS_STR)
          ;;
       deploy-targets) needs_arg; DEPLOY_TARGETS=$OPTARG ;;
+      only-clean) X_ONLY_CLEAN=1 ;;
       h) usage ;;
       *) die "Error: Unknown option detected: [$OPT], use option -h to see options";;
    esac
@@ -367,21 +369,23 @@ if [ "$X_RECREATE_HEDGEHOG" == "1" ]; then
       retval_check $?
    fi
 
-   echo "---> creating fs on source: FSNAME=[$FSNAME] <--- [$(date)]"
-   sshpass -p welcome ssh $SSHARGS \
-      ir@${CLUSTERS[0]} \
-      "purefs create $FSNAME"
-   retval_check $?
-   echo "---> adding protocol flag to fs on source: FSNAME=[$FSNAME] <--- [$(date)]"
-   sshpass -p welcome ssh $SSHARGS \
-      ir@${CLUSTERS[0]} \
-      "purefs add --protocol nfsv3 $FSNAME"
-   retval_check $?
-   echo "---> creating replica link <--- [$(date)]"
-   sshpass -p welcome ssh $SSHARGS \
-      ir@${CLUSTERS[0]} \
-      "purefs replica-link create --remote ${CLUSTERS[1]} $FSNAME"
-   retval_check $?
+   if [ "$X_ONLY_CLEAN" != "1" ]; then
+      echo "---> creating fs on source: FSNAME=[$FSNAME] <--- [$(date)]"
+      sshpass -p welcome ssh $SSHARGS \
+         ir@${CLUSTERS[0]} \
+         "purefs create $FSNAME"
+      retval_check $?
+      echo "---> adding protocol flag to fs on source: FSNAME=[$FSNAME] <--- [$(date)]"
+      sshpass -p welcome ssh $SSHARGS \
+         ir@${CLUSTERS[0]} \
+         "purefs add --protocol nfsv3 $FSNAME"
+      retval_check $?
+      echo "---> creating replica link <--- [$(date)]"
+      sshpass -p welcome ssh $SSHARGS \
+         ir@${CLUSTERS[0]} \
+         "purefs replica-link create --remote ${CLUSTERS[1]} $FSNAME"
+      retval_check $?
+   fi
 fi
 
 if [ "$RUN_TEST" == "1" ]; then
