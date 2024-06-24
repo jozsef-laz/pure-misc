@@ -38,7 +38,9 @@ usage() {
    echo "  --deploy-targets=<targets>    comma separated list of targets to tree deploy" 1>&2
    echo "                                for the list of targets see: ./run tools/remote/tree_deploy.py -h" 1>&2
    echo "                                Default: $DEFAULT_DEPLOY_TARGETS" 1>&2
-   echo "  --only-clean    when used with -x, hedghog fs+link will be only cleaned, not recreated" 1>&2
+   echo "  --only-clean             when used with -x, hedghog fs+link will be only cleaned, not recreated" 1>&2
+   echo "  --reverse-connect        when used with -c, second cluster is going to be the source array" 1>&2
+   echo "                           and first one is going to be the target array" 1>&2
    echo "" 1>&2
    echo "examples:" 1>&2
    echo "   for preparing a testbed for MW replication integration tests:" 1>&2
@@ -104,6 +106,7 @@ while getopts "idarcefltxh-:" OPT; do
          ;;
       deploy-targets) needs_arg; DEPLOY_TARGETS=$OPTARG ;;
       only-clean) X_ONLY_CLEAN=1 ;;
+      reverse-connect) C_REVERSE_CONNECT=1 ;;
       h) usage ;;
       *) die "Error: Unknown option detected: [$OPT], use option -h to see options";;
    esac
@@ -238,15 +241,24 @@ fi
 
 if [ "$CONNECT_ARRAYS" == "1" ]; then
    echo "---> connecting arrays <---"
+   if [ "$C_REVERSE_CONNECT" == "1" ]; then
+      echo "---> reverse connecting arrays ! <---"
+      SOURCE_CLUSTER=${CLUSTERS[1]}
+      TARGET_CLUSTER=${CLUSTERS[0]}
+   else
+      SOURCE_CLUSTER=${CLUSTERS[0]}
+      TARGET_CLUSTER=${CLUSTERS[1]}
+   fi
+   echo "---> SOURCE_CLUSTER = [$SOURCE_CLUSTER], TARGET_CLUSTER = [$TARGET_CLUSTER] <---"
    CONNECTION_KEY=$(sshpass -p welcome ssh $SSHARGS \
-      ir@${CLUSTERS[1]} \
+      ir@$TARGET_CLUSTER \
       "purearray create --connection-key" | tail -n 1)
    MGMT_IP=$(sshpass -p welcome ssh $SSHARGS \
-      ir@${CLUSTERS[1]} \
+      ir@$TARGET_CLUSTER \
       "purenetwork list --service management --csv" | grep vir0 | cut -d ',' -f4)
    echo "MGMT_IP=[$MGMT_IP], CONNECTION_KEY=[${CONNECTION_KEY:0:34}...]"
    sshpass -p welcome ssh $SSHARGS \
-     ir@${CLUSTERS[0]} \
+     ir@$SOURCE_CLUSTER \
      "echo "$CONNECTION_KEY" | purearray connect --management-address $MGMT_IP"
 fi
 
