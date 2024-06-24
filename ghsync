@@ -4,28 +4,34 @@ RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 RESET=0
-while getopts "sfr" option; do
+while getopts "sfra" option; do
    case $option in
-      s)
-         SYNC=1
-         ;;
-      f)
-         FETCH=1
-         ;;
-      r)
-         RESET=1
-         ;;
+      s) SYNC=1 ;;
+      f) FETCH=1 ;;
+      r) RESET=1 ;;
+      a) ALL_BRANCHES=1 ;;
    esac
 done
 
 # branches to sync
-branches=( \
+usual_branches=( \
    master \
    area/pasg \
    feature/encrypted_file_replication \
+)
+all_branches=${usual_branches[@]}
+all_branches+=( \
+   rel4-1-x \
    rel4-3-x \
+   rel4-4-0 \
    rel4-4-x \
 )
+
+if [ "$ALL_BRANCHES" == "1" ]; then
+   branches=${all_branches[@]}
+else
+   branches=${usual_branches[@]}
+fi
 
 if [ "$SYNC" == "1" ]; then
    for branch in ${branches[@]}
