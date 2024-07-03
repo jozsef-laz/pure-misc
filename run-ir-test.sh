@@ -27,7 +27,7 @@ usage() {
    echo "  -e              exchange certificates" 1>&2
    echo "  -f              turning on feature flags on clusters" 1>&2
    echo "  -l              clean logs (on FMs & blades: /logs/*)" 1>&2
-   echo "  -t              running test" 1>&2
+   echo "  -t <num>        running numbered test, with 0 it lists available testcases" 1>&2
    echo "  -h              help" 1>&2
    echo "  -x              temp: deleting hedghog fs+link and recreating it (with link)" 1>&2
    echo "  --sha=<sha>     sha of the commit to bootstrap to clusters (full sha needed)" 1>&2
@@ -59,7 +59,7 @@ usage() {
 die() { echo "$*" >&2; exit 2; }
 needs_arg() { if [ -z "$OPTARG" ]; then die "No arg for --$OPT option"; fi; }
 
-while getopts "idarcefltxh-:" OPT; do
+while getopts "idarceflt:xh-:" OPT; do
    # support long options: https://stackoverflow.com/a/28466267/519360
    if [ "$OPT" = "-" ]; then   # long option: reformulate OPT and OPTARG
       OPT="${OPTARG%%=*}"       # extract long option name
@@ -92,9 +92,7 @@ while getopts "idarcefltxh-:" OPT; do
       l)
          CLEAN_LOGS=1
          ;;
-      t)
-         RUN_TEST=1
-         ;;
+      t) RUN_TEST=1; TEST_NUM=$OPTARG ;;
       x) X_RECREATE_HEDGEHOG=1 ;;
       sha) needs_arg; SHA=$OPTARG ;;
       branch) needs_arg; BRANCH=$OPTARG ;;
@@ -400,7 +398,29 @@ if [ "$X_RECREATE_HEDGEHOG" == "1" ]; then
    fi
 fi
 
+declare -A TEST_DICT=( \
+   [1]="ir_test/functional/replication/test_replication_encryption.py::test_cross_version_encrypted_link_creation" \
+   [2]="ir_test/functional/replication/replication_throttling.py::test_throttling_trio" \
+   [3]="ir_test/functional/replication/test_tc.py" \
+   [4]="ir_test/functional/replication/test_replication_with_nfsd_restart.py -k restart_one_or_two_blades_per_resgrp" \
+)
+
 if [ "$RUN_TEST" == "1" ]; then
+   if [ -z "$TEST_NUM" ] || [ "$TEST_NUM" == "0" ]; then
+      echo "---> available testcases <--- [$(date)]"
+      for t in ${!TEST_DICT[@]}; do
+         echo $t, ${TEST_DICT[$t]}
+      done | tac
+      exit 0
+   elif [ -z "${TEST_DICT[$TEST_NUM]}" ]; then
+      echo "Error: TEST_NUM=$TEST_NUM does not exist in TEST_DICT:"
+      for t in ${!TEST_DICT[@]}; do
+         echo $t, ${TEST_DICT[$t]}
+      done | tac
+      exit 1
+   else
+      TESTCASE=${TEST_DICT[$TEST_NUM]}
+   fi
    echo "---> checking  <--- [$(date)]"
    ( cd /home/ir/work/initiator_tools
       if [ ! -f initiator_tools-$SHA-1404.tar.gz ]; then
@@ -410,13 +430,12 @@ if [ "$RUN_TEST" == "1" ]; then
       fi
    )
    echo "---> running the test <--- [$(date)]"
-   # PS_FEATURE_FLAG_ENCRYPTED_FILE_REPLICATION=true time ./run ir_test/exec_test \
-   AD_TEST_DOMAINS="dc=ir-jad2019,dc=local" time ./run ir_test/exec_test \
-      --initiator-tools=/home/ir/work/initiator_tools/initiator_tools-$SHA-1404.tar.gz \
+   echo "---> TEST_NUM=[$TESTNUM], TESTCASE=[$TESTCASE] <--- [$(date)]"
+   time PS_FEATURE_FLAG_ENCRYPTED_FILE_REPLICATION=true AD_TEST_DOMAINS="dc=ir-jad2019,dc=local" ./run ir_test/exec_test \
+      --update_initiators=0 \
       --verbose \
       --config ${CLUSTERS[0]} \
-      ir_test/functional/replication/replication_throttling.py \
-      -k test_throttling_smoke
+      $TESTCASE
    TEST_RESULT=$?
 
    echo "---> collecting the logs <---"
