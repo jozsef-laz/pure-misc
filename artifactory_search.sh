@@ -42,9 +42,9 @@ SHAS=$(git log -$NUM_OF_COMMITS_TO_CHECK --pretty=format:'%H' $BRANCH)
 if [ "$LATEST_SHA" == "1" ]; then
    for SHA in $SHAS
    do
-      LINK="https://pure-artifactory.dev.purestorage.com/artifactory/iridium-artifacts/build/$SHA/ubuntu2204/"
-      HTTP_RESULT=$(wget --spider --server-response $LINK 2>&1 | awk '/^  HTTP/{print $2}')
-      if [ "$HTTP_RESULT" == "200" ]; then
+      LINK="https://pure-artifactory.dev.purestorage.com/artifactory/iridium-artifacts/build/$SHA/ubuntu2204/iros.img.gz"
+      IROS_HTTP_RESULT=$(wget --spider --server-response $LINK 2>&1 | awk '/^  HTTP/{print $2}')
+      if [ "$IROS_HTTP_RESULT" == "200" ]; then
          echo -n "$SHA"
          exit 0
       fi
@@ -53,16 +53,33 @@ if [ "$LATEST_SHA" == "1" ]; then
    exit 1
 fi
 
-git --no-pager log --graph --decorate -$NUM_OF_COMMITS_TO_CHECK --oneline --abbrev-commit $BRANCH
-for SHA in $SHAS
-do
-   LINK="https://pure-artifactory.dev.purestorage.com/artifactory/iridium-artifacts/build/$SHA/ubuntu2204/"
-   HTTP_RESULT=$(wget --spider --server-response $LINK 2>&1 | awk '/^  HTTP/{print $2}')
+color_result() {
+   HTTP_RESULT=${1:-NA}
    if [ "$HTTP_RESULT" == "200" ]
    then
-      RESULT_COLORED="$Gre$HTTP_RESULT$RCol - $LINK"
+      RESULT_COLORED="$Gre$HTTP_RESULT$RCol"
    else
       RESULT_COLORED="$Red$HTTP_RESULT$RCol"
    fi
-   echo -e "$SHA - $RESULT_COLORED"
+   echo $RESULT_COLORED
+}
+
+git --no-pager log --graph --decorate -$NUM_OF_COMMITS_TO_CHECK --oneline --abbrev-commit $BRANCH
+echo "DIR: whether the directory for the sha exists on artifactory"
+echo "IROS: whether iros.img.gz exists in the directory"
+echo "                    SHA                  - DIR - IROS - LINK"
+for SHA in $SHAS
+do
+   DIR_LINK="https://pure-artifactory.dev.purestorage.com/artifactory/iridium-artifacts/build/$SHA/ubuntu2204/"
+   IROS_LINK="https://pure-artifactory.dev.purestorage.com/artifactory/iridium-artifacts/build/$SHA/ubuntu2204/iros.img.gz"
+   DIR_HTTP_RESULT=$(wget --spider --server-response $DIR_LINK 2>&1 | awk '/^  HTTP/{print $2}')
+   IROS_HTTP_RESULT=$(wget --spider --server-response $IROS_LINK 2>&1 | awk '/^  HTTP/{print $2}')
+   DIR_COLORED_RES=$(color_result $DIR_HTTP_RESULT)
+   IROS_COLORED_RES=$(color_result $IROS_HTTP_RESULT)
+   if [ "$DIR_HTTP_RESULT" == "200" ]
+   then
+      echo -e "$SHA - $DIR_COLORED_RES - $IROS_COLORED_RES  - $DIR_LINK"
+   else
+      echo -e "$SHA - $DIR_COLORED_RES - $IROS_COLORED_RES"
+   fi
 done
