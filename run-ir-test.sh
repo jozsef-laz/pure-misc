@@ -434,7 +434,7 @@ if [ "$RUN_TEST" == "1" ]; then
    rm -f ir_test.log
 
    echo "---> running the test <--- [$(date)]"
-   echo "---> TEST_NUM=[$TESTNUM], TESTCASE=[$TESTCASE] <--- [$(date)]"
+   echo "---> TEST_NUM=[$TEST_NUM], TESTCASE=[$TESTCASE] <--- [$(date)]"
    time PS_FEATURE_FLAG_ENCRYPTED_FILE_REPLICATION=true AD_TEST_DOMAINS="dc=ir-jad2019,dc=local" ./run ir_test/exec_test \
       --update_initiators=0 \
       --verbose \
