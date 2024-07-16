@@ -429,6 +429,10 @@ if [ "$RUN_TEST" == "1" ]; then
          mv initiator_tools.tar.gz initiator_tools-$SHA-1404.tar.gz
       fi
    )
+
+   echo "---> cleaning ir_test.log  <--- [$(date)]"
+   rm -f ir_test.log
+
    echo "---> running the test <--- [$(date)]"
    echo "---> TEST_NUM=[$TESTNUM], TESTCASE=[$TESTCASE] <--- [$(date)]"
    time PS_FEATURE_FLAG_ENCRYPTED_FILE_REPLICATION=true AD_TEST_DOMAINS="dc=ir-jad2019,dc=local" ./run ir_test/exec_test \
