@@ -171,7 +171,7 @@ for CLUSTER in $CLUSTERS; do
       echo "collecting from FM #$FMNUM"
       # getting admin ip of FM
       FM_IP=$(sshpass -p welcome ssh $SSH_PARAMS \
-         ir@$CLUSTER "purenetwork list --csv | grep 'fm$FMNUM.admin0,' | cut -d',' -f4")
+         ir@$CLUSTER "purenetwork list --csv | grep 'fm$FMNUM.admin0,' | cut -d',' -f5")
       FM_DIR=$DIR/${CLUSTER}_sup${FMNUM}_${FM_IP}
       echo "FM_IP = [$FM_IP], FM_DIR=[$FM_DIR]"
       mkdir $FM_DIR
@@ -204,7 +204,7 @@ for CLUSTER in $CLUSTERS; do
 
    # for transferring the logs, we use FM1, because usually the active one is FM2
    FM1_IP=$(sshpass -p welcome ssh $SSH_PARAMS \
-      ir@$CLUSTER "purenetwork list --csv | grep 'fm1.admin0,' | cut -d',' -f4")
+      ir@$CLUSTER "purenetwork list --csv | grep 'fm1.admin0,' | cut -d',' -f5")
    BLADENUM=$(sshpass -p welcome ssh $SSH_PARAMS \
       ir@$CLUSTER "pureblade list | grep healthy | tail -n1 | cut -d' ' -f1 | cut -d'B' -f2")
    echo "Cluster has $BLADENUM blades"
