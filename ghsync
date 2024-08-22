@@ -18,6 +18,7 @@ usual_branches=( \
    master \
    area/pasg \
    feature/encrypted_file_replication \
+   rel4-5-a \
 )
 all_branches=${usual_branches[@]}
 all_branches+=( \
