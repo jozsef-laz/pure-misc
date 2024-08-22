@@ -9,11 +9,13 @@ BBlu='\e[1;34m'
 Pur='\e[0;35m'
 
 NUM_OF_COMMITS_TO_CHECK=20
+DEFAULT_UBUNTU_VERSION="2204"
 
 usage() {
    echo "Usage: $0 <opts>" 1>&2
    echo "  -l              print latest sha which is usable" 1>&2
    echo "  -b <branch>     branchname (or commit, tag). If not specified, HEAD is going to be used" 1>&2
+   echo "  -u <version>    ubuntu version to check in artifactory, eg: 1404, 1804, 2204, 2404, default: $DEFAULT_UBUNTU_VERSION" 1>&2
    echo "  -h              help" 1>&2
    echo "" 1>&2
    echo "examples:" 1>&2
@@ -24,10 +26,11 @@ usage() {
 die() { echo "$*" >&2; exit 2; }
 needs_arg() { if [ -z "$OPTARG" ]; then die "No arg for --$OPT option"; fi; }
 
-while getopts "b:lh" OPT; do
+while getopts "b:lu:h" OPT; do
    case "$OPT" in
       b) needs_arg; BRANCH=$OPTARG ;;
       l) LATEST_SHA=1 ;;
+      u) needs_arg; UBUNTU_VERSION=$OPTARG ;;
       *) usage ;;
    esac
 done
@@ -37,12 +40,17 @@ if [ -z "$BRANCH" ]; then
    echo "No branchname was given (-b option), using HEAD"
 fi
 
+if [ -z "$UBUNTU_VERSION" ]; then
+   echo "No ubuntu version was given (-u option), using $DEFAULT_UBUNTU_VERSION"
+   UBUNTU_VERSION=$DEFAULT_UBUNTU_VERSION
+fi
+
 SHAS=$(git log -$NUM_OF_COMMITS_TO_CHECK --pretty=format:'%H' $BRANCH)
 
 if [ "$LATEST_SHA" == "1" ]; then
    for SHA in $SHAS
    do
-      LINK="https://pure-artifactory.dev.purestorage.com/artifactory/iridium-artifacts/build/$SHA/ubuntu2204/iros.img.gz"
+      LINK="https://pure-artifactory.dev.purestorage.com/artifactory/iridium-artifacts/build/$SHA/ubuntu${UBUNTU_VERSION}/iros.img.gz"
       IROS_HTTP_RESULT=$(wget --spider --server-response $LINK 2>&1 | awk '/^  HTTP/{print $2}')
       if [ "$IROS_HTTP_RESULT" == "200" ]; then
          echo -n "$SHA"
@@ -70,8 +78,8 @@ echo "IROS: whether iros.img.gz exists in the directory"
 echo "                    SHA                  - DIR - IROS - LINK"
 for SHA in $SHAS
 do
-   DIR_LINK="https://pure-artifactory.dev.purestorage.com/artifactory/iridium-artifacts/build/$SHA/ubuntu2204/"
-   IROS_LINK="https://pure-artifactory.dev.purestorage.com/artifactory/iridium-artifacts/build/$SHA/ubuntu2204/iros.img.gz"
+   DIR_LINK="https://pure-artifactory.dev.purestorage.com/artifactory/iridium-artifacts/build/$SHA/ubuntu${UBUNTU_VERSION}/"
+   IROS_LINK="https://pure-artifactory.dev.purestorage.com/artifactory/iridium-artifacts/build/$SHA/ubuntu${UBUNTU_VERSION}/iros.img.gz"
    DIR_HTTP_RESULT=$(wget --spider --server-response $DIR_LINK 2>&1 | awk '/^  HTTP/{print $2}')
    IROS_HTTP_RESULT=$(wget --spider --server-response $IROS_LINK 2>&1 | awk '/^  HTTP/{print $2}')
    DIR_COLORED_RES=$(color_result $DIR_HTTP_RESULT)
