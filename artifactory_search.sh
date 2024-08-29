@@ -36,12 +36,16 @@ while getopts "b:lu:h" OPT; do
 done
 shift $((OPTIND-1))
 
-if [ -z "$BRANCH" ]; then
+# do not log when using -l option, because it's mostly used in scripts
+if [ -z "$BRANCH" ] && [ -z "$LATEST_SHA" ]; then
    echo "No branchname was given (-b option), using HEAD"
 fi
 
 if [ -z "$UBUNTU_VERSION" ]; then
-   echo "No ubuntu version was given (-u option), using $DEFAULT_UBUNTU_VERSION"
+   # do not log when using -l option, because it's mostly used in scripts
+   if [ -z "$LATEST_SHA" ]; then
+      echo "No ubuntu version was given (-u option), using $DEFAULT_UBUNTU_VERSION"
+   fi
    UBUNTU_VERSION=$DEFAULT_UBUNTU_VERSION
 fi
 
