@@ -23,7 +23,6 @@ usage() {
    echo "                      - nfs: nfs.log of blades" 1>&2
    echo "                      - system: system.log of FMs" 1>&2
    echo "                      - system_blades: system.log of blades" 1>&2
-   echo "                      - atop_blades: atop measurements on blades" 1>&2
    echo "                     default value: \"$LOGTYPES_DEFAULT_ARG\"" 1>&2
    echo "  -d <dir path>   relative path where log pack directory shall be created" 1>&2
    echo "                     (ex. \"path/to/downloads\", then logs will be under \"path/to/downloads/irpXXX-cXX_2024-01-30-T17-00-37)" 1>&2
@@ -92,14 +91,11 @@ if (( $MAX_HOUR < $MIN_HOUR )); then
 fi
 echo "minimum hour: [$MIN_HOUR]"
 echo "maximum hour: [$MAX_HOUR]"
-DOWNLOAD_MIDDLEWARE_LOG=$(echo "$LOGTYPES_ARG" | grep "middleware")
-DOWNLOAD_PLATFORM_LOG=$(echo "$LOGTYPES_ARG" | grep "platform")
-DOWNLOAD_PLATFORM_BLADES_LOG=$(echo "$LOGTYPES_ARG" | grep "platform_blades")
-DOWNLOAD_NFS_LOG=$(echo "$LOGTYPES_ARG" | grep "nfs")
-DOWNLOAD_SYSTEM_LOG=$(echo "$LOGTYPES_ARG" | grep "system")
-DOWNLOAD_SYSTEM_BLADES_LOG=$(echo "$LOGTYPES_ARG" | grep "system_blades")
-DOWNLOAD_ATOP_BLADES_LOG=$(echo "$LOGTYPES_ARG" | grep "atop_blades")
 
+does_logtype_contain() {
+   SPECIFIC_LOGTYPE=$1
+   echo "$LOGTYPES_ARG" | grep "$SPECIFIC_LOGTYPE"
+}
 #declare -A LOGNAME_PATTERN=( \
 #   ["middleware"]="middleware.log" \
 #   ["platform"]="platform.log" \
@@ -118,7 +114,7 @@ SSHARGS=" \
 CURRENT_DATE=$(date "+%F-T%H-%M-%S")
 # directory in which we download the logs
 # we use the first cluster's name, because that's what indentifies the testbed
-DIR="${CLUSTER}_$CURRENT_DATE"
+DIR="${CLUSTER}_$DATE-T$MIN_HOUR"
 echo "DIR_PREFIX=[$DIR_PREFIX]"
 if [ ! -z "$DIR_PREFIX" ]; then
    DIR="$DIR_PREFIX/$DIR"
@@ -159,6 +155,20 @@ get_desired_logs() {
 FUSE_DATE=$(echo $DATE | sed -e "s/-/_/g")
 echo "FUSE_DATE=[$FUSE_DATE]"
 
+download_desired_logs() {
+   # relying on global vars instead of passing 10 vars :(
+   FM=$1
+   DESIRED_LOGS=$2
+   LOCAL_DIR=$3
+   echo "FM=$FM, DESIRED_LOG=$DESIRED_LOGS, LOCAL_DIR=$LOCAL_DIR"
+   LOGFILES=$(ssh $SSH_PARAMS \
+      $USERNAME@$FUSE_SERVER "cd $CLUSTER_DIR_ON_FUSE/$FUSE_DATE/$FM; ls $DESIRED_LOGS")
+   echo "LOGFILES=[$LOGFILES]"
+   for LOGFILE in $LOGFILES; do
+      download_file $USERNAME@$FUSE_SERVER:$CLUSTER_DIR_ON_FUSE/$FUSE_DATE/$FM/$LOGFILE $LOCAL_DIR
+   done
+}
+
 #ssh $SSH_PARAMS \
 #   $FUSE_SERVER "goto $CLUSTER; pwd"
 if [ -z "$CLUSTER_DIR_ON_FUSE" ]; then
@@ -178,36 +188,24 @@ for FM in $FM_DIRS; do
    LOCAL_FM_DIR=$DIR/${FM}
    mkdir $LOCAL_FM_DIR
    echo "collecting from FM: $FM"
-   if [ ! -z "$DOWNLOAD_MIDDLEWARE_LOG" ]; then
+   if [ ! -z "$(does_logtype_contain middleware)" ]; then
       DESIRED_MW_LOGS=$(get_desired_logs "middleware.log")
       echo "DESIRED_MW_LOGS=[$DESIRED_MW_LOGS]"
-      LOGFILES=$(ssh $SSH_PARAMS \
-         $USERNAME@$FUSE_SERVER "cd $CLUSTER_DIR_ON_FUSE/$FUSE_DATE/$FM; ls $DESIRED_MW_LOGS")
-      echo "LOGFILES=[$LOGFILES]"
-      for LOGFILE in $LOGFILES; do
-         download_file $USERNAME@$FUSE_SERVER:$CLUSTER_DIR_ON_FUSE/$FUSE_DATE/$FM/$LOGFILE $LOCAL_FM_DIR
-      done
+      download_desired_logs $FM "$DESIRED_MW_LOGS" $LOCAL_FM_DIR
    fi
-   if [ ! -z "$DOWNLOAD_PLATFORM_LOG" ]; then
+   echo
+   if [ ! -z "$(does_logtype_contain platform)" ]; then
       DESIRED_PLATFORM_LOGS=$(get_desired_logs "platform.log")
       echo "DESIRED_PLATFORM_LOGS=[$DESIRED_PLATFORM_LOGS]"
-      LOGFILES=$(ssh $SSH_PARAMS \
-         $USERNAME@$FUSE_SERVER "cd $CLUSTER_DIR_ON_FUSE/$FUSE_DATE/$FM; ls $DESIRED_PLATFORM_LOGS")
-      echo "LOGFILES=[$LOGFILES]"
-      for LOGFILE in $LOGFILES; do
-         download_file $USERNAME@$FUSE_SERVER:$CLUSTER_DIR_ON_FUSE/$FUSE_DATE/$FM/$LOGFILE $LOCAL_FM_DIR
-      done
+      download_desired_logs $FM "$DESIRED_PLATFORM_LOGS" $LOCAL_FM_DIR
    fi
-   if [ ! -z "$DOWNLOAD_SYSTEM_LOG" ]; then
+   echo
+   if [ ! -z "$(does_logtype_contain system)" ]; then
       DESIRED_SYSTEM_LOGS=$(get_desired_logs "system.log")
       echo "DESIRED_SYSTEM_LOGS=[$DESIRED_SYSTEM_LOGS]"
-      LOGFILES=$(ssh $SSH_PARAMS \
-         $USERNAME@$FUSE_SERVER "cd $CLUSTER_DIR_ON_FUSE/$FUSE_DATE/$FM; ls $DESIRED_SYSTEM_LOGS")
-      echo "LOGFILES=[$LOGFILES]"
-      for LOGFILE in $LOGFILES; do
-         download_file $USERNAME@$FUSE_SERVER:$CLUSTER_DIR_ON_FUSE/$FUSE_DATE/$FM/$LOGFILE $LOCAL_FM_DIR
-      done
+      download_desired_logs $FM "$DESIRED_SYSTEM_LOGS" $LOCAL_FM_DIR
    fi
+   echo
 done
 
 BLADE_DIRS=$(echo $LOGDIRS | sed 's/ /\n/g' | grep "fb[0-9]\+$")
@@ -217,36 +215,24 @@ for BLADE in $BLADE_DIRS; do
    LOCAL_BLADE_DIR=$DIR/$BLADE
    mkdir $LOCAL_BLADE_DIR
    echo "collecting from BLADE: $BLADE"
-   if [ ! -z "$DOWNLOAD_NFS_LOG" ]; then
+   if [ ! -z "$(does_logtype_contain nfs)" ]; then
       DESIRED_NFS_LOGS=$(get_desired_logs "nfs.log")
       echo "DESIRED_NFS_LOGS=[$DESIRED_NFS_LOGS]"
-      LOGFILES=$(ssh $SSH_PARAMS \
-         $USERNAME@$FUSE_SERVER "cd $CLUSTER_DIR_ON_FUSE/$FUSE_DATE/$BLADE; ls $DESIRED_NFS_LOGS")
-      echo "LOGFILES=[$LOGFILES]"
-      for LOGFILE in $LOGFILES; do
-         download_file $USERNAME@$FUSE_SERVER:$CLUSTER_DIR_ON_FUSE/$FUSE_DATE/$BLADE/$LOGFILE $LOCAL_BLADE_DIR
-      done
+      download_desired_logs $FM "$DESIRED_NFS_LOGS" $LOCAL_BLADE_DIR
    fi
-   if [ ! -z "$DOWNLOAD_PLATFORM_BLADES_LOG" ]; then
+   echo
+   if [ ! -z "$(does_logtype_contain platform_blades)" ]; then
       DESIRED_PLATFORM_LOGS=$(get_desired_logs "platform.log")
       echo "DESIRED_PLATFORM_LOGS=[$DESIRED_PLATFORM_LOGS]"
-      LOGFILES=$(ssh $SSH_PARAMS \
-         $USERNAME@$FUSE_SERVER "cd $CLUSTER_DIR_ON_FUSE/$FUSE_DATE/$BLADE; ls $DESIRED_PLATFORM_LOGS")
-      echo "LOGFILES=[$LOGFILES]"
-      for LOGFILE in $LOGFILES; do
-         download_file $USERNAME@$FUSE_SERVER:$CLUSTER_DIR_ON_FUSE/$FUSE_DATE/$BLADE/$LOGFILE $LOCAL_BLADE_DIR
-      done
+      download_desired_logs $FM "$DESIRED_PLATFORM_LOGS" $LOCAL_BLADE_DIR
    fi
-   if [ ! -z "$DOWNLOAD_SYSTEM_BLADES_LOG" ]; then
+   echo
+   if [ ! -z "$(does_logtype_contain system_blades)" ]; then
       DESIRED_SYSTEM_LOGS=$(get_desired_logs "system.log")
       echo "DESIRED_SYSTEM_LOGS=[$DESIRED_SYSTEM_LOGS]"
-      LOGFILES=$(ssh $SSH_PARAMS \
-         $USERNAME@$FUSE_SERVER "cd $CLUSTER_DIR_ON_FUSE/$FUSE_DATE/$BLADE; ls $DESIRED_SYSTEM_LOGS")
-      echo "LOGFILES=[$LOGFILES]"
-      for LOGFILE in $LOGFILES; do
-         download_file $USERNAME@$FUSE_SERVER:$CLUSTER_DIR_ON_FUSE/$FUSE_DATE/$BLADE/$LOGFILE $LOCAL_BLADE_DIR
-      done
+      download_desired_logs $FM "$DESIRED_SYSTEM_LOGS" $LOCAL_BLADE_DIR
    fi
+   echo
 done
 
 echo "decompressing every .zst file we downloaded in DIR=[$DIR] ..."
