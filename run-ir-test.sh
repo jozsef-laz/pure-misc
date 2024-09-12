@@ -2,7 +2,7 @@
 CLUSTERS_DEFAULT=(irp871-c76 irp871-c77)
 printf -v CLUSTERS_DEFAULT_JOINED_EXTRA_COMMA '%s,' "${CLUSTERS_DEFAULT[@]}"
 CLUSTERS_DEFAULT_JOINED="${CLUSTERS_DEFAULT_JOINED_EXTRA_COMMA%,}"
-DEFAULT_DEPLOY_TARGETS="middleware,cpp_release,feature-flags-system,feature-flags-admin,pure-cli,etcd,admin,inuk,plugins,netconf,FF"
+DEFAULT_DEPLOY_TARGETS="middleware,cpp_release,feature-flags-system,feature-flags-admin,pure-cli,etcd,admin,inuk,plugins,netconf"
 
 retval_check () {
    RETVAL=$1
@@ -168,26 +168,38 @@ if [ "$TREE_DEPLOY" == "1" ]; then
 
    echo "---> targets to deploy: DEPLOY_TARGETS=[$DEPLOY_TARGETS] <---"
    for CLUSTER in ${CLUSTERS[@]}; do
-      if [ ! -z "$(echo $DEPLOY_TARGETS | grep middleware)" ]; then
-         echo "---> tree deploy to cluster [$CLUSTER]: MW <---"
-         time ./run tools/remote/tree_deploy.py -v -a $CLUSTER -sa middleware
+      SA_TARGETS=""
+      NA_TARGETS=""
+      SA_NA_TARGETS=""
+
+      for target in middleware; do
+         if [ ! -z "$(echo $DEPLOY_TARGETS | grep $target)" ]; then SA_TARGETS="$SA_TARGETS $target"; fi
+      done
+
+      for target in cpp_release; do
+         if [ ! -z "$(echo $DEPLOY_TARGETS | grep $target)" ]; then NA_TARGETS="$NA_TARGETS $target"; fi
+      done
+
+      for target in feature-flags-system feature-flags-admin pure-cli etcd admin plugins netconf inuk; do
+         if [ ! -z "$(echo $DEPLOY_TARGETS | grep $target)" ]; then SA_NA_TARGETS="$SA_NA_TARGETS $target"; fi
+      done
+
+      if [ ! -z "$SA_TARGETS" ]; then
+         echo "---> tree deploy to cluster [$CLUSTER]: SA_TARGETS=[$SA_TARGETS] <---"
+         time ./run tools/remote/tree_deploy.py -v -a $CLUSTER -sa $SA_TARGETS
          retval_check $?
       fi
-      if [ ! -z "$(echo $DEPLOY_TARGETS | grep cpp_release)" ]; then
-         echo "---> tree deploy to cluster [$CLUSTER]: NFS <---"
-         time ./run tools/remote/tree_deploy.py -v -a $CLUSTER -na cpp_release
+      if [ ! -z "$NA_TARGETS" ]; then
+         echo "---> tree deploy to cluster [$CLUSTER]: NA_TARGETS=[$NA_TARGETS] <---"
+         time ./run tools/remote/tree_deploy.py -v -a $CLUSTER -na $NA_TARGETS
          retval_check $?
       fi
-      if [ ! -z "$(echo $DEPLOY_TARGETS | grep FF)" ]; then
-         echo "---> tree deploy to cluster [$CLUSTER]: FF <---"
-         time ./run tools/remote/tree_deploy.py -v -a $CLUSTER -sa -na feature-flags-system feature-flags-admin pure-cli etcd admin plugins netconf
+      if [ ! -z "$SA_NA_TARGETS" ]; then
+         echo "---> tree deploy to cluster [$CLUSTER]: SA_NA_TARGETS=[$SA_NA_TARGETS] <---"
+         time ./run tools/remote/tree_deploy.py -v -a $CLUSTER -sa -na $SA_NA_TARGETS
          retval_check $?
       fi
-      if [ ! -z "$(echo $DEPLOY_TARGETS | grep inuk)" ]; then
-         echo "---> tree deploy to cluster [$CLUSTER]: inuk <---"
-         time ./run tools/remote/tree_deploy.py -v -a $CLUSTER -sa -na inuk
-         retval_check $?
-      fi
+
       echo "---> restarting cluster [$CLUSTER] <--- [$(date)]"
       time ./run tools/remote/restart_sw.py --wait -na -sa restart -a $CLUSTER
       retval_check $?
@@ -253,11 +265,11 @@ if [ "$CONNECT_ARRAYS" == "1" ]; then
       "purearray create --connection-key" | tail -n 1)
    MGMT_IP=$(sshpass -p welcome ssh $SSHARGS \
       ir@$TARGET_CLUSTER \
-      "purenetwork list --service management --csv" | grep vir0 | cut -d ',' -f4)
+      "purenetwork list --service management --csv" | grep vir0 | cut -d ',' -f5)
    echo "MGMT_IP=[$MGMT_IP], CONNECTION_KEY=[${CONNECTION_KEY:0:34}...]"
    sshpass -p welcome ssh $SSHARGS \
-     ir@$SOURCE_CLUSTER \
-     "echo "$CONNECTION_KEY" | purearray connect --management-address $MGMT_IP"
+      ir@$SOURCE_CLUSTER \
+      "echo "$CONNECTION_KEY" | purearray connect --management-address $MGMT_IP"
 fi
 
 if [ "$EXCHANGE_CERTIFICATES" == "1" ]; then
