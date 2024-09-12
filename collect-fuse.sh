@@ -157,15 +157,16 @@ echo "FUSE_DATE=[$FUSE_DATE]"
 
 download_desired_logs() {
    # relying on global vars instead of passing 10 vars :(
-   FM=$1
+   # REMOTE_DIR is FM or BLADE, eg. ch1-fm1 or ch1-fb1
+   REMOTE_DIR=$1
    DESIRED_LOGS=$2
    LOCAL_DIR=$3
-   echo "FM=$FM, DESIRED_LOG=$DESIRED_LOGS, LOCAL_DIR=$LOCAL_DIR"
+   echo "REMOTE_DIR=$REMOTE_DIR, DESIRED_LOG=$DESIRED_LOGS, LOCAL_DIR=$LOCAL_DIR"
    LOGFILES=$(ssh $SSH_PARAMS \
-      $USERNAME@$FUSE_SERVER "cd $CLUSTER_DIR_ON_FUSE/$FUSE_DATE/$FM; ls $DESIRED_LOGS")
+      $USERNAME@$FUSE_SERVER "cd $CLUSTER_DIR_ON_FUSE/$FUSE_DATE/$REMOTE_DIR; ls $DESIRED_LOGS")
    echo "LOGFILES=[$LOGFILES]"
    for LOGFILE in $LOGFILES; do
-      download_file $USERNAME@$FUSE_SERVER:$CLUSTER_DIR_ON_FUSE/$FUSE_DATE/$FM/$LOGFILE $LOCAL_DIR
+      download_file $USERNAME@$FUSE_SERVER:$CLUSTER_DIR_ON_FUSE/$FUSE_DATE/$REMOTE_DIR/$LOGFILE $LOCAL_DIR
    done
 }
 
@@ -218,19 +219,19 @@ for BLADE in $BLADE_DIRS; do
    if [ ! -z "$(does_logtype_contain nfs)" ]; then
       DESIRED_NFS_LOGS=$(get_desired_logs "nfs.log")
       echo "DESIRED_NFS_LOGS=[$DESIRED_NFS_LOGS]"
-      download_desired_logs $FM "$DESIRED_NFS_LOGS" $LOCAL_BLADE_DIR
+      download_desired_logs $BLADE "$DESIRED_NFS_LOGS" $LOCAL_BLADE_DIR
    fi
    echo
    if [ ! -z "$(does_logtype_contain platform_blades)" ]; then
       DESIRED_PLATFORM_LOGS=$(get_desired_logs "platform.log")
       echo "DESIRED_PLATFORM_LOGS=[$DESIRED_PLATFORM_LOGS]"
-      download_desired_logs $FM "$DESIRED_PLATFORM_LOGS" $LOCAL_BLADE_DIR
+      download_desired_logs $BLADE "$DESIRED_PLATFORM_LOGS" $LOCAL_BLADE_DIR
    fi
    echo
    if [ ! -z "$(does_logtype_contain system_blades)" ]; then
       DESIRED_SYSTEM_LOGS=$(get_desired_logs "system.log")
       echo "DESIRED_SYSTEM_LOGS=[$DESIRED_SYSTEM_LOGS]"
-      download_desired_logs $FM "$DESIRED_SYSTEM_LOGS" $LOCAL_BLADE_DIR
+      download_desired_logs $BLADE "$DESIRED_SYSTEM_LOGS" $LOCAL_BLADE_DIR
    fi
    echo
 done
