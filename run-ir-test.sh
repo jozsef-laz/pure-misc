@@ -41,6 +41,8 @@ usage() {
    echo "  --only-clean             when used with -x, hedghog fs+link will be only cleaned, not recreated" 1>&2
    echo "  --reverse-connect        when used with -c, second cluster is going to be the source array" 1>&2
    echo "                           and first one is going to be the target array" 1>&2
+   echo "  --create-datavip         creates datavip on all clusters" 1>&2
+   echo "  --fsstress               running fsstress for hedgehog fs" 1>&2
    echo "" 1>&2
    echo "examples:" 1>&2
    echo "   for preparing a testbed for MW replication integration tests:" 1>&2
@@ -105,6 +107,8 @@ while getopts "idarceflt:xh-:" OPT; do
       deploy-targets) needs_arg; DEPLOY_TARGETS=$OPTARG ;;
       only-clean) X_ONLY_CLEAN=1 ;;
       reverse-connect) C_REVERSE_CONNECT=1 ;;
+      fsstress) RUN_FSSTRESS=1 ;;
+      create-datavip) CREATE_DATA_VIP=1 ;;
       h) usage ;;
       *) die "Error: Unknown option detected: [$OPT], use option -h to see options";;
    esac
@@ -246,6 +250,39 @@ if [ "$CREATE_REPLICATION_VIP" == "1" ]; then
          echo "$RESULT"
       fi
       echo $RESULT
+   done
+fi
+
+nextip(){
+    IP=$1
+    IP_HEX=$(printf '%.2X%.2X%.2X%.2X\n' `echo $IP | sed -e 's/\./ /g'`)
+    NEXT_IP_HEX=$(printf %.8X `echo $(( 0x$IP_HEX + 1 ))`)
+    NEXT_IP=$(printf '%d.%d.%d.%d\n' `echo $NEXT_IP_HEX | sed -r 's/(..)/0x\1 /g'`)
+    echo "$NEXT_IP"
+}
+
+if [ "$CREATE_DATA_VIP" == "1" ]; then
+   retval_check $?
+   for CLUSTER in ${CLUSTERS[@]}; do
+      echo "CLUSTER = [$CLUSTER]"
+      echo "---> checking data vip on clusters <---"
+      RESULT=$(sshpass -p welcome ssh $SSHARGS \
+         ir@$CLUSTER \
+         "purenetwork list | grep data")
+      if [ "$RESULT" ]; then
+         echo "---> datavip already exists on cluster: $CLUSTER <---"
+         continue
+      fi
+      HIGHEST_IP=$(sshpass -p welcome ssh $SSHARGS \
+         ir@$CLUSTER \
+         "purenetwork list --csv --notitle | cut -d "," -f5 | grep -v : | sort | tail -n1")
+      DATAVIP=$(nextip $HIGHEST_IP)
+      echo "DATAVIP = [$DATAVIP]"
+      echo "---> creating data vip on clusters <---"
+      sshpass -p welcome ssh $SSHARGS \
+         ir@$CLUSTER \
+         "purenetwork vip create --address $DATAVIP --servicelist data datavip"
+      retval_check $?
    done
 fi
 
@@ -408,6 +445,28 @@ if [ "$X_RECREATE_HEDGEHOG" == "1" ]; then
          "purefs replica-link create --remote ${CLUSTERS[1]} $FSNAME"
       retval_check $?
    fi
+fi
+
+# this is not smart enough yet
+if [ "$RUN_FSSTRESS" == "1" ]; then
+   FSNAME="hedgehog"
+   DATAVIP=$(sshpass -p welcome ssh $SSHARGS ${CLUSTERS[0]} "purenetwork list --csv" | grep ^data | cut -d',' -f5)
+   echo "---> DATAVIP=[$DATAVIP] <---"
+   if [ -z "$DATAVIP" ]; then
+      echo "Error: there's no data vip on the cluster"
+      exit 1
+   fi
+   FSSTRESS_LOG_PATH="/home/ir/fsstress-$(date '+%H-%M-%S').log"
+   echo "FSSTRESS_LOG_PATH=[$FSSTRESS_LOG_PATH]"
+   echo "---> running fsstress <---"
+   time sshpass -p welcome ssh $SSHARGS ir@${CLUSTERS[0]}h01 "/ir_test/tools/bld_linux/bin/fsstress \
+      --config /ir_test/tools/bld_linux/fill_sim.cfg \
+      --duration 60 \
+      --server $DATAVIP \
+      --timeout 120 \
+      --path /$FSNAME/left,/$FSNAME/right \
+      --nfsdtype SIMULATION >> $FSSTRESS_LOG_PATH"
+   retval_check $?
 fi
 
 declare -A TEST_DICT=( \
