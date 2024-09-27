@@ -215,23 +215,38 @@ if [ "$TREE_DEPLOY" == "1" ]; then
 fi
 
 if [ "$UPDATE_APPLIANCE_ID" == "1" ]; then
-   echo "---> update appliance_id on the second cluster: ${CLUSTERS[1]} <---"
-   if [ ${#CLUSTERS[@]} -lt 2 ]; then
-     echo "Error: CLUSTERS array needs to have at least 2 items, but it has only the following ${#CLUSTERS[@]}:"
-     for CLUSTER in ${CLUSTERS[@]}; do
-        echo "    $CLUSTER"
-     done
-     exit 1
-   fi
+   echo "---> updating appliance_ids <---"
 
    # to prevent this:
    # array_config.py: Put key appliance_id failed: EtcdError: KV client is not ready (code: -32021)
-   sleep 10
+   SLEEP_TIME=10
+   echo "---> safety sleep for $SLEEP_TIME sec <---"
+   sleep $SLEEP_TIME
 
-   sshpass -p welcome ssh $SSHARGS \
-     ir@${CLUSTERS[1]} \
-     "sudo /opt/ir/admin/internal/array_config.py put appliance_id '\"00000000-0000-4000-8000-000000000001\"'"
-   retval_check $?
+   BASE_APPLIANCE_ID="00000000-0000-4000-8000-00000000000X"
+   CLUSTER_NUM=0
+   for CLUSTER in ${CLUSTERS[@]}; do
+      # substitute X with a number
+      APPLIANCE_ID=${BASE_APPLIANCE_ID//X/$CLUSTER_NUM}
+      echo "---> updating appliance_id on cluster [$CLUSTER] to [$APPLIANCE_ID] <--- [$(date)]"
+      sshpass -p welcome ssh $SSHARGS \
+         ir@$CLUSTER \
+         "sudo /opt/ir/admin/internal/array_config.py put appliance_id '\"$APPLIANCE_ID\"'"
+      retval_check $?
+      echo "---> stopping Middleware <--- [$(date)]"
+      sshpass -p welcome ssh $SSHARGS \
+         ir@$CLUSTER \
+         "sudo fbservice stop middleware"
+      sleep 2
+      echo "---> starting Middleware <--- [$(date)]"
+      sshpass -p welcome ssh $SSHARGS \
+         ir@$CLUSTER \
+         "sudo fbservice start middleware"
+      CLUSTER_NUM=$((CLUSTER_NUM+1))
+   done
+
+   echo "---> waiting for MW to start up <---"
+   sleep 15
 fi
 
 if [ "$CREATE_REPLICATION_VIP" == "1" ]; then
