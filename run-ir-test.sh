@@ -203,7 +203,9 @@ if [ "$TREE_DEPLOY" == "1" ]; then
          time ./run tools/remote/tree_deploy.py -v -a $CLUSTER -sa -na $SA_NA_TARGETS
          retval_check $?
       fi
+   done
 
+   for CLUSTER in ${CLUSTERS[@]}; do
       echo "---> restarting cluster [$CLUSTER] <--- [$(date)]"
       time ./run tools/remote/restart_sw.py --wait -na -sa restart -a $CLUSTER
       retval_check $?
