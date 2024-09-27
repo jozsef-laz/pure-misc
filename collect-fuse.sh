@@ -23,14 +23,15 @@ usage() {
    echo "                      - nfs: nfs.log of blades" 1>&2
    echo "                      - system: system.log of FMs" 1>&2
    echo "                      - system_blades: system.log of blades" 1>&2
+   echo "                      - haproxy_blades: haproxy.log of blades" 1>&2
    echo "                     default value: \"$LOGTYPES_DEFAULT_ARG\"" 1>&2
    echo "  -d <dir path>   relative path where log pack directory shall be created" 1>&2
    echo "                     (ex. \"path/to/downloads\", then logs will be under \"path/to/downloads/irpXXX-cXX_2024-01-30-T17-00-37)" 1>&2
    echo "                     only irpXXX-cXX... directory will be created but no parents (for safety considerations)" 1>&2
-   echo "  --date <date>         the date we need data for (format: YYYY-MM-DD)" 1>&2
-   echo "  --min-hour <hour>     the minimum hour we need data for in 24 hour format" 1>&2
-   echo "  --max-hour <hour>      the maximum hour we need data for in 24 hour format" 1>&2
-   echo "  --cluster-dir-on-fuse <path>    the dir where 'goto <cluster>' brings on fuse (without date)" 1>&2
+   echo "  --date=<date>         the date we need data for (format: YYYY-MM-DD)" 1>&2
+   echo "  --min-hour=<hour>     the minimum hour we need data for in 24 hour format" 1>&2
+   echo "  --max-hour=<hour>      the maximum hour we need data for in 24 hour format" 1>&2
+   echo "  --cluster-dir-on-fuse=<path>    the dir where 'goto <cluster>' brings on fuse (without date)" 1>&2
 
    echo "  -h              help" 1>&2
    exit 1
@@ -232,6 +233,12 @@ for BLADE in $BLADE_DIRS; do
       DESIRED_SYSTEM_LOGS=$(get_desired_logs "system.log")
       echo "DESIRED_SYSTEM_LOGS=[$DESIRED_SYSTEM_LOGS]"
       download_desired_logs $BLADE "$DESIRED_SYSTEM_LOGS" $LOCAL_BLADE_DIR
+   fi
+   echo
+   if [ ! -z "$(does_logtype_contain haproxy_blades)" ]; then
+      DESIRED_HAPROXY_LOGS=$(get_desired_logs "haproxy.log")
+      echo "DESIRED_HAPROXY_LOGS=[$DESIRED_HAPROXY_LOGS]"
+      download_desired_logs $BLADE "$DESIRED_HAPROXY_LOGS" $LOCAL_BLADE_DIR
    fi
    echo
 done
