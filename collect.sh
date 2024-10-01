@@ -14,6 +14,7 @@ usage() {
    echo "                      - nfs: nfs.log of blades" 1>&2
    echo "                      - system: system.log of FMs" 1>&2
    echo "                      - system_blades: system.log of blades" 1>&2
+   echo "                      - haproxy_blades: haproxy.log of blades" 1>&2
    echo "                      - atop_blades: atop measurements on blades" 1>&2
    echo "                     default value: \"$LOGTYPES_DEFAULT_ARG\"" 1>&2
    echo "  -d <dir path>   relative path where log pack directory shall be created" 1>&2
@@ -70,6 +71,7 @@ DOWNLOAD_PLATFORM_BLADES_LOG=$(echo "$LOGTYPES_ARG" | grep "platform_blades")
 DOWNLOAD_NFS_LOG=$(echo "$LOGTYPES_ARG" | grep "nfs")
 DOWNLOAD_SYSTEM_LOG=$(echo "$LOGTYPES_ARG" | grep "system")
 DOWNLOAD_SYSTEM_BLADES_LOG=$(echo "$LOGTYPES_ARG" | grep "system_blades")
+DOWNLOAD_HAPROXY_BLADES_LOG=$(echo "$LOGTYPES_ARG" | grep "haproxy_blades")
 DOWNLOAD_ATOP_BLADES_LOG=$(echo "$LOGTYPES_ARG" | grep "atop_blades")
 
 #declare -A LOGNAME_PATTERN=( \
@@ -231,6 +233,13 @@ for CLUSTER in $CLUSTERS; do
       if [ ! -z "$DOWNLOAD_SYSTEM_BLADES_LOG" ]; then
          LOGFILES=$(sshpass -p welcome ssh $SSH_PARAMS \
             ir@$CLUSTER "ssh ir$NUM \"cd /logs; ls system.log* -tr | tail --lines $NUMBER_OF_LOGFILES\"")
+         for LOGFILE in $LOGFILES; do
+            download_file_from_blade $LOGFILE $BLADE_DIR $NUM $FM1_IP $CLUSTER
+         done
+      fi
+      if [ ! -z "$DOWNLOAD_HAPROXY_BLADES_LOG" ]; then
+         LOGFILES=$(sshpass -p welcome ssh $SSH_PARAMS \
+            ir@$CLUSTER "ssh ir$NUM \"cd /logs; ls haproxy.log* -tr | tail --lines $NUMBER_OF_LOGFILES\"")
          for LOGFILE in $LOGFILES; do
             download_file_from_blade $LOGFILE $BLADE_DIR $NUM $FM1_IP $CLUSTER
          done
