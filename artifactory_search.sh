@@ -8,7 +8,7 @@ BYel='\e[1;33m'
 BBlu='\e[1;34m'
 Pur='\e[0;35m'
 
-NUM_OF_COMMITS_TO_CHECK=20
+DEFAULT_NUM_OF_COMMITS_TO_CHECK=20
 DEFAULT_UBUNTU_VERSION="2204"
 
 usage() {
@@ -16,6 +16,7 @@ usage() {
    echo "  -l              print latest sha which is usable" 1>&2
    echo "  -b <branch>     branchname (or commit, tag). If not specified, HEAD is going to be used" 1>&2
    echo "  -u <version>    ubuntu version to check in artifactory, eg: 1404, 1804, 2204, 2404, default: $DEFAULT_UBUNTU_VERSION" 1>&2
+   echo "  -c <count>      number of commits to check, default: $DEFAULT_NUM_OF_COMMITS_TO_CHECK" 1>&2
    echo "  -h              help" 1>&2
    echo "" 1>&2
    echo "examples:" 1>&2
@@ -26,11 +27,12 @@ usage() {
 die() { echo "$*" >&2; exit 2; }
 needs_arg() { if [ -z "$OPTARG" ]; then die "No arg for --$OPT option"; fi; }
 
-while getopts "b:lu:h" OPT; do
+while getopts "b:lu:c:h" OPT; do
    case "$OPT" in
       b) needs_arg; BRANCH=$OPTARG ;;
       l) LATEST_SHA=1 ;;
       u) needs_arg; UBUNTU_VERSION=$OPTARG ;;
+      c) needs_arg; NUM_OF_COMMITS_TO_CHECK=$OPTARG ;;
       *) usage ;;
    esac
 done
@@ -47,6 +49,10 @@ if [ -z "$UBUNTU_VERSION" ]; then
       echo "No ubuntu version was given (-u option), using $DEFAULT_UBUNTU_VERSION"
    fi
    UBUNTU_VERSION=$DEFAULT_UBUNTU_VERSION
+fi
+
+if [ -z "$NUM_OF_COMMITS_TO_CHECK" ]; then
+   NUM_OF_COMMITS_TO_CHECK=$DEFAULT_NUM_OF_COMMITS_TO_CHECK
 fi
 
 SHAS=$(git log -$NUM_OF_COMMITS_TO_CHECK --pretty=format:'%H' $BRANCH)
