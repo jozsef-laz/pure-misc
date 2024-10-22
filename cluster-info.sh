@@ -1,8 +1,6 @@
 #! /bin/bash
-BASE_DIR=$(pwd)
 CLUSTER_INFO_FILE="cluster-info.txt"
 
-#ack "Starting heartbeat rpc_type=array_conn_heartbeat" -l
 # finding out portal blades
 for irpdir in $(ls -d irp[0-9][0-9][0-9]-c[0-9][0-9]); do
    nfs_logs=$(ack -g 'nfs.log' $irpdir)
