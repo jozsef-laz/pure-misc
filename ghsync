@@ -18,6 +18,7 @@ usual_branches=( \
    master \
    area/pasg \
    rel4-5-a \
+   rel4-5-b \
 )
 all_branches=${usual_branches[@]}
 all_branches+=( \
