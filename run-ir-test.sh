@@ -207,7 +207,16 @@ if [ "$TREE_DEPLOY" == "1" ]; then
 
    for CLUSTER in ${CLUSTERS[@]}; do
       echo "---> restarting cluster [$CLUSTER] <--- [$(date)]"
-      time ./run tools/remote/restart_sw.py --wait -na -sa restart -a $CLUSTER
+      RESTART_TARGETS=""
+      if [ ! -z "$SA_TARGETS" ] || [ ! -z "$SA_NA_TARGETS" ]; then
+         RESTART_TARGETS="$RESTART_TARGETS -sa "
+      fi
+      if [ ! -z "$NA_TARGETS" ] || [ ! -z "$SA_NA_TARGETS" ]; then
+         RESTART_TARGETS="$RESTART_TARGETS -na "
+      fi
+      RESTART_TARGETS=" -sa -na " # override
+      echo "---> RESTART_TARGETS=[$RESTART_TARGETS] <--- [$(date)]"
+      time ./run tools/remote/restart_sw.py --wait $RESTART_TARGETS restart -a $CLUSTER
       retval_check $?
    done
    echo "---> sleeping for 20 sec <---"
@@ -317,13 +326,16 @@ if [ "$CONNECT_ARRAYS" == "1" ]; then
    CONNECTION_KEY=$(sshpass -p welcome ssh $SSHARGS \
       ir@$TARGET_CLUSTER \
       "purearray create --connection-key" | tail -n 1)
+   retval_check $?
    MGMT_IP=$(sshpass -p welcome ssh $SSHARGS \
       ir@$TARGET_CLUSTER \
       "purenetwork list --service management --csv" | grep vir0 | cut -d ',' -f5)
+   retval_check $?
    echo "MGMT_IP=[$MGMT_IP], CONNECTION_KEY=[${CONNECTION_KEY:0:34}...]"
    sshpass -p welcome ssh $SSHARGS \
       ir@$SOURCE_CLUSTER \
       "echo "$CONNECTION_KEY" | purearray connect --management-address $MGMT_IP"
+   retval_check $?
 fi
 
 if [ "$EXCHANGE_CERTIFICATES" == "1" ]; then
