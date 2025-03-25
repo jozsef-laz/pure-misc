@@ -19,36 +19,42 @@ SSHARGS=" \
 
 usage() {
    echo "Usage: $0 <opts>" 1>&2
-   echo "  -i              initiates cluster (clean & start)" 1>&2
-   echo "  -d              tree deploy" 1>&2
-   echo "  -a              update appliance_id" 1>&2
-   echo "  -r              create replication vip on all clusters" 1>&2
-   echo "  -c              create array connection between arrays" 1>&2
+   echo "  --clusters=<clusters>    comma separated list of clusters to use" 1>&2
+   echo "                           Note: some actions assume 2 clusters (eg. certificate exchange)" 1>&2
+   echo "" 1>&2
+   echo "  -i                       initiates (bootstraps) cluster (clean & start)" 1>&2
+   echo "  --sha=<sha>              sha of the commit to bootstrap to clusters (full sha needed)" 1>&2
+   echo "  --branch=<branch>        the branch where the latest available sha shall be used" 1>&2
+   echo "                           if both --sha and --branch is specified, --sha is going to be used" 1>&2
+   echo "" 1>&2
+   echo "  -d                            tree deploy" 1>&2
+   echo "  --deploy-targets=<targets>    comma separated list of targets to tree deploy" 1>&2
+   echo "                                for the list of targets see: ./run tools/remote/tree_deploy.py -h" 1>&2
+   echo "                                Default: $DEFAULT_DEPLOY_TARGETS" 1>&2
+   echo "" 1>&2
+   echo "  -a                       update appliance_id" 1>&2
+   echo "                           change to 00000000-0000-4000-8000-00000000000X, where X = 1,2,3,..." 1>&2
+   echo "  --revert-appliance-ids   revert them back to 00000000-0000-4000-8000-000000000000 (use together with -a)" 1>&2
+   echo "" 1>&2
+   echo "  -r                       create replication vip on all clusters" 1>&2
+   echo "  -c                       create array connection between arrays" 1>&2
+   echo "  --reverse-connect        when used with -c, second cluster is going to be the source array" 1>&2
+   echo "                           and first one is going to be the target array" 1>&2
    echo "  -e              exchange certificates" 1>&2
    echo "  -f              turning on feature flags on clusters" 1>&2
    echo "  -l              clean logs (on FMs & blades: /logs/*)" 1>&2
    echo "  -t <num>        running numbered test, with 0 it lists available testcases" 1>&2
-   echo "  -h              help" 1>&2
    echo "  -x              temp: deleting hedghog fs+link and recreating it (with link)" 1>&2
-   echo "  --sha=<sha>     sha of the commit to bootstrap to clusters (full sha needed)" 1>&2
-   echo "  --branch=<branch>        the branch where the latest available sha shall be used" 1>&2
-   echo "                           if both --sha and --branch is specified, --sha is going to be used" 1>&2
-   echo "  --clusters=<clusters>    comma separated list of clusters to use for the above commands" 1>&2
-   echo "                           Note: some actions assume 2 clusters (eg. certificate exchange)" 1>&2
-   echo "  --deploy-targets=<targets>    comma separated list of targets to tree deploy" 1>&2
-   echo "                                for the list of targets see: ./run tools/remote/tree_deploy.py -h" 1>&2
-   echo "                                Default: $DEFAULT_DEPLOY_TARGETS" 1>&2
    echo "  --only-clean             when used with -x, hedghog fs+link will be only cleaned, not recreated" 1>&2
-   echo "  --reverse-connect        when used with -c, second cluster is going to be the source array" 1>&2
-   echo "                           and first one is going to be the target array" 1>&2
-   echo "  --create-datavip         creates datavip on all clusters" 1>&2
    echo "  --fsstress               running fsstress for hedgehog fs" 1>&2
+   echo "  --create-datavip         creates datavip on all clusters" 1>&2
+   echo "  -h              help" 1>&2
    echo "" 1>&2
    echo "examples:" 1>&2
    echo "   for preparing a testbed for MW replication integration tests:" 1>&2
-   echo "      $0 -i -d -a -r -e -f" 1>&2
+   echo "      $0 -i -d -a -r" 1>&2
    echo "   initing testbed for s3 test:" 1>&2
-   echo "      $0 -i -d -f" 1>&2
+   echo "      $0 -i -d" 1>&2
    echo "   running test:" 1>&2
    echo "      $0 -t" 1>&2
    echo "   mixed version usage:" 1>&2
@@ -70,43 +76,28 @@ while getopts "idarceflt:xh-:" OPT; do
       echo "long option detected: OPT=[$OPT], OPTARG=[$OPTARG]"
    fi
    case "$OPT" in
-      i)
-         INITIATE_CLUSTER=1
-         ;;
-      d)
-         TREE_DEPLOY=1
-         ;;
-      a)
-         UPDATE_APPLIANCE_ID=1
-         ;;
-      r)
-         CREATE_REPLICATION_VIP=1
-         ;;
-      c)
-         CONNECT_ARRAYS=1
-         ;;
-      e)
-         EXCHANGE_CERTIFICATES=1
-         ;;
-      f)
-         SET_FEATURE_FLAGS=1
-         ;;
-      l)
-         CLEAN_LOGS=1
-         ;;
-      t) RUN_TEST=1; TEST_NUM=$OPTARG ;;
-      x) X_RECREATE_HEDGEHOG=1 ;;
-      sha) needs_arg; SHA=$OPTARG ;;
-      branch) needs_arg; BRANCH=$OPTARG ;;
       clusters)
          needs_arg
          CLUSTERS_JOINED=$OPTARG
          CLUSTERS_STR=$(echo "$CLUSTERS_JOINED" | sed -e "s/,/ /g")
          CLUSTERS=($CLUSTERS_STR)
          ;;
+      i) INITIATE_CLUSTER=1 ;;
+      sha) needs_arg; SHA=$OPTARG ;;
+      branch) needs_arg; BRANCH=$OPTARG ;;
+      d) TREE_DEPLOY=1 ;;
       deploy-targets) needs_arg; DEPLOY_TARGETS=$OPTARG ;;
-      only-clean) X_ONLY_CLEAN=1 ;;
+      a) UPDATE_APPLIANCE_ID=1 ;;
+      revert-appliance-ids) REVERT_APPLIANCE_ID=1 ;;
+      r) CREATE_REPLICATION_VIP=1 ;;
+      c) CONNECT_ARRAYS=1 ;;
       reverse-connect) C_REVERSE_CONNECT=1 ;;
+      e) EXCHANGE_CERTIFICATES=1 ;;
+      f) SET_FEATURE_FLAGS=1 ;;
+      l) CLEAN_LOGS=1 ;;
+      t) RUN_TEST=1; TEST_NUM=$OPTARG ;;
+      x) X_RECREATE_HEDGEHOG=1 ;;
+      only-clean) X_ONLY_CLEAN=1 ;;
       fsstress) RUN_FSSTRESS=1 ;;
       create-datavip) CREATE_DATA_VIP=1 ;;
       h) usage ;;
@@ -236,7 +227,11 @@ if [ "$UPDATE_APPLIANCE_ID" == "1" ]; then
    CLUSTER_NUM=0
    for CLUSTER in ${CLUSTERS[@]}; do
       # substitute X with a number
-      APPLIANCE_ID=${BASE_APPLIANCE_ID//X/$CLUSTER_NUM}
+      if [ "$REVERT_APPLIANCE_ID" == "1" ]; then
+         APPLIANCE_ID=${BASE_APPLIANCE_ID//X/0}
+      else
+         APPLIANCE_ID=${BASE_APPLIANCE_ID//X/$CLUSTER_NUM}
+      fi
       echo "---> updating appliance_id on cluster [$CLUSTER] to [$APPLIANCE_ID] <--- [$(date)]"
       sshpass -p welcome ssh $SSHARGS \
          ir@$CLUSTER \
