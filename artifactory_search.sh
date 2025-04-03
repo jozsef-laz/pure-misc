@@ -9,7 +9,7 @@ BBlu='\e[1;34m'
 Pur='\e[0;35m'
 
 DEFAULT_NUM_OF_COMMITS_TO_CHECK=20
-DEFAULT_UBUNTU_VERSION="2204"
+DEFAULT_UBUNTU_VERSION="2404"
 
 usage() {
    echo "Usage: $0 <opts>" 1>&2

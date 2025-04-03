@@ -127,7 +127,7 @@ if [ "$INITIATE_CLUSTER" == "1" ] || [ "$RUN_TEST" == "1" ]; then
       if [ -z "$BRANCH" ]; then
          BRANCH="HEAD"
       fi
-      SHA=$(artifactory_search.sh -l -b $BRANCH -c 30 -u 2404)
+      SHA=$(artifactory_search.sh -l -b $BRANCH -c 30)
       retval=$?
       echo "artifactory_search.sh returned SHA=[$SHA] for BRANCH=[$BRANCH]"
       retval_check $retval
