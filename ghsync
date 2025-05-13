@@ -4,11 +4,12 @@ RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 RESET=0
-while getopts "sfra" option; do
+while getopts "sfrla" option; do
    case $option in
       s) SYNC=1 ;;
       f) FETCH=1 ;;
       r) RESET=1 ;;
+      l) LAMELLA=1 ;;
       a) ALL_BRANCHES=1 ;;
    esac
 done
@@ -81,5 +82,11 @@ then
          fi
       fi
    done
+   echo ""
+fi
+
+if [ "$LAMELLA" == "1" ]; then
+   echo "--> pulling LAMELLA repo"
+   git -C object pull --quiet --prune --ff-only
    echo ""
 fi
