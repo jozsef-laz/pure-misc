@@ -18,8 +18,7 @@ done
 usual_branches=( \
    master \
    area/pasg \
-   rel4-5-b \
-   rel4-5-x \
+   rel4-6-0 \
 )
 all_branches=${usual_branches[@]}
 all_branches+=( \
@@ -28,6 +27,8 @@ all_branches+=( \
    rel4-4-0 \
    rel4-4-x \
    rel4-5-a \
+   rel4-5-b \
+   rel4-5-x \
 )
 
 if [ "$ALL_BRANCHES" == "1" ]; then
