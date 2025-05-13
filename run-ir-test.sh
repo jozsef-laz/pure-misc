@@ -4,6 +4,11 @@ printf -v CLUSTERS_DEFAULT_JOINED_EXTRA_COMMA '%s,' "${CLUSTERS_DEFAULT[@]}"
 CLUSTERS_DEFAULT_JOINED="${CLUSTERS_DEFAULT_JOINED_EXTRA_COMMA%,}"
 DEFAULT_DEPLOY_TARGETS="middleware,cpp_release,feature-flags-system,feature-flags-admin,pure-cli,etcd,admin,inuk,plugins,netconf"
 
+FEATURE_FLAGS=( \
+   PS_FEATURE_FLAG_MULTITENANCY_WAVE2 \
+   PS_FEATURE_FLAG_MANAGEMENT_ACCESS_POLICY \
+)
+
 retval_check () {
    RETVAL=$1
    if [ $RETVAL != 0 ]; then
@@ -381,10 +386,14 @@ if [ "$SET_FEATURE_FLAGS" == "1" ]; then
          ir@$CLUSTER \
          "exec.py -na -sa \"sudo purefeatureflags reset-all\""
       retval_check $?
-      sshpass -p welcome ssh $SSHARGS \
-         ir@$CLUSTER \
-         "exec.py -na -sa \"sudo purefeatureflags enable --flags PS_FEATURE_FLAG_ENCRYPTED_FILE_REPLICATION\""
-      retval_check $?
+
+      for FEATURE_FLAG in ${FEATURE_FLAGS[@]}; do
+         echo "---> turning on feature flag: [$FEATURE_FLAG] <--- [$(date)]"
+         sshpass -p welcome ssh $SSHARGS \
+            ir@$CLUSTER \
+            "exec.py -na -sa \"sudo purefeatureflags enable --flags $FEATURE_FLAG\""
+         retval_check $?
+      done
       echo "---> restarting cluster [$CLUSTER] <--- [$(date)]"
       time ./run tools/remote/restart_sw.py --wait -na -sa restart -a $CLUSTER
       retval_check $?
