@@ -22,6 +22,7 @@ usual_branches=( \
 )
 all_branches=${usual_branches[@]}
 all_branches+=( \
+   dev \
    rel4-1-x \
    rel4-3-x \
    rel4-4-0 \
@@ -89,5 +90,9 @@ fi
 if [ "$LAMELLA" == "1" ]; then
    echo "--> pulling LAMELLA repo"
    git -C object pull --quiet --prune --ff-only
-   echo ""
+   echo "lamella [DIR=object] retval=[$?]"
+
+   echo "--> pulling ALLOY repo"
+   git -C tpc/alloy pull --quiet --prune --ff-only
+   echo "alloy [DIR=tpc/alloy] retval=[$?]"
 fi
