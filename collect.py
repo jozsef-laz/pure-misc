@@ -139,7 +139,7 @@ for cluster in clusters:
     ip1 = ''
     ip2 = ''
     master_fm = 0
-    with agentNestedConnectWithPassword(None, "irp871-c01", username="ir", password="welcome", look_for_keys=False) as client:
+    with agentNestedConnectWithPassword(None, cluster, username="ir", password="welcome", look_for_keys=False) as client:
         ip1 = run(client, f"purenetwork list --csv | grep 'fm1.admin0,' | cut -d',' -f5")
         ip2 = run(client, f"purenetwork list --csv | grep 'fm2.admin0,' | cut -d',' -f5")
         master_fm = int(run(client, "puremastership list | grep master | cut -d'M' -f2 | cut -c1-1"))
