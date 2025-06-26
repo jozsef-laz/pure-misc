@@ -141,15 +141,26 @@ for cluster in clusters:
 print(f"decompressing every .zst file we downloaded in toplevel_logdir=[{toplevel_logdir}] ...")
 subprocess.run(["find", toplevel_logdir, "-name", "*.zst", "-exec", "sh", "-c",  'zstd -d "{}"; rm -f "{}"', ";"])
 
-current_time = datetime.datetime.now().timestamp()
-ir_test_log_time = os.path.getmtime('ir_test.log')
-if os.path.exists('ir_test.log') and ir_test_log_time < current_time:
+def copy_ir_test_log():
+    if not os.path.exists('ir_test.log'):
+        print('no ir_test.log was found')
+        return
+
+    current_time = datetime.datetime.now().timestamp()
+    ir_test_log_time = os.path.getmtime('ir_test.log')
+    if ir_test_log_time > current_time:
+        print('ir_test.log was modified in the future, skipping...')
+        return
+
     ir_test_log_age = current_time - ir_test_log_time
     print(f"ir_test.log age: {int(ir_test_log_age)} sec")
-    if ir_test_log_age < 12*60*60:
-        print(f"copying ir_test.log")
-        shutil.copyfile('ir_test.log', os.path.join(toplevel_logdir, 'ir_test.log'))
-    else:
+    if ir_test_log_age > 12*60*60:
         print(f"NOT copying ir_test.log, because it is too old")
+        return
+
+    print(f"copying ir_test.log")
+    shutil.copyfile('ir_test.log', os.path.join(toplevel_logdir, 'ir_test.log'))
+
+copy_ir_test_log()
 
 print(f'\nlogdir = {toplevel_logdir}')
