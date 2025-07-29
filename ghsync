@@ -4,12 +4,11 @@ RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 RESET=0
-while getopts "sfrla" option; do
+while getopts "sfra" option; do
    case $option in
       s) SYNC=1 ;;
       f) FETCH=1 ;;
       r) RESET=1 ;;
-      l) LAMELLA=1 ;;
       a) ALL_BRANCHES=1 ;;
    esac
 done
@@ -18,18 +17,11 @@ done
 usual_branches=( \
    master \
    area/pasg \
-   rel4-6-0 \
 )
 all_branches=${usual_branches[@]}
 all_branches+=( \
    dev \
-   rel4-1-x \
-   rel4-3-x \
-   rel4-4-0 \
-   rel4-4-x \
-   rel4-5-a \
-   rel4-5-b \
-   rel4-5-x \
+   rel4-6-0 \
 )
 
 if [ "$ALL_BRANCHES" == "1" ]; then
@@ -48,10 +40,30 @@ if [ "$SYNC" == "1" ]; then
 fi
 
 if [ "$FETCH" == "1" ]; then
-   echo "--> fetching repos"
+   echo "--> fetching main repos"
    git fetch --prune origin
+   echo "fetching origin retval=[$?]"
    git fetch --prune upstream ${branches[@]}
+   echo "fetching upstream retval=[$?]"
    echo ""
+
+   if [ "$ALL_BRANCHES" == "1" ]; then
+      echo "--> pulling LAMELLA repo"
+      git -C object pull --quiet --prune --ff-only
+      echo "lamella [DIR=object] retval=[$?]"
+
+      # echo "--> pulling ALLOY repo"
+      # git -C tpc/alloy_sync pull --quiet --prune --ff-only
+      # echo "alloy [DIR=tpc/alloy_sync] retval=[$?]"
+
+      echo "--> pulling FUSION repo"
+      git -C fusion-shared pull --quiet --prune --ff-only
+      echo "fusion [DIR=fusion-shared] retval=[$?]"
+
+      echo "--> pulling dsx repo"
+      git -C dsx pull --quiet --prune --ff-only
+      echo "dsx [DIR=dsx] retval=[$?]"
+   fi
 fi
 
 if [ "$RESET" == "1" ]
@@ -85,14 +97,4 @@ then
       fi
    done
    echo ""
-fi
-
-if [ "$LAMELLA" == "1" ]; then
-   echo "--> pulling LAMELLA repo"
-   git -C object pull --quiet --prune --ff-only
-   echo "lamella [DIR=object] retval=[$?]"
-
-   echo "--> pulling ALLOY repo"
-   git -C tpc/alloy pull --quiet --prune --ff-only
-   echo "alloy [DIR=tpc/alloy] retval=[$?]"
 fi
