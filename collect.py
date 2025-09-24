@@ -12,9 +12,9 @@ LOGTYPES_DEFAULT_ARG="middleware,platform,nfs,platform_blades"
 
 parser = argparse.ArgumentParser(
                     prog='collect.py',
-                    description='Collects logs from clusters')
+                    description='Collects logs from clusters',
+                    formatter_class=argparse.RawTextHelpFormatter)
 parser.add_argument('-c', '--clusters', type=str, help='where clusters are names of clusters separated by comma (ex. \"irp871-c01,irp871-c02\")')
-# TODO: nice format in help
 parser.add_argument('-l', '--logtypes', type=str, default=LOGTYPES_DEFAULT_ARG, help=f'''\
 list of logtypes which we want to download (separated by comma)
    possible values:
@@ -27,7 +27,6 @@ list of logtypes which we want to download (separated by comma)
     - haproxy_blades: haproxy.log of blades
     - atop_blades: atop measurements on blades
    default value: \"{LOGTYPES_DEFAULT_ARG}\"''')
-# TODO: nice format in help
 parser.add_argument('-d', '--dir-prefix', type=str, default='', help='''\
 relative path where log pack directory shall be created.
 (ex. \"path/to/downloads\", then logs will be under \"path/to/downloads/irpXXX-cXX_2024-01-30-T17-00-37)
