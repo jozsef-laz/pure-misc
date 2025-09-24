@@ -1,14 +1,14 @@
 import argparse
 import datetime
 import os
+import re
 import subprocess
 import shutil
 from scp import SCPClient
 
 import paramiko_utils
 
-LOGTYPES_DEFAULT_ARG="middleware,platform,nfs"
-DEFAULT_NUMBER_OF_LOGFILES=3
+LOGTYPES_DEFAULT_ARG="middleware,platform,nfs,platform_blades"
 
 parser = argparse.ArgumentParser(
                     prog='collect.py',
@@ -16,7 +16,7 @@ parser = argparse.ArgumentParser(
 parser.add_argument('-c', '--clusters', type=str, help='where clusters are names of clusters separated by comma (ex. \"irp871-c01,irp871-c02\")')
 # TODO: nice format in help
 parser.add_argument('-l', '--logtypes', type=str, default=LOGTYPES_DEFAULT_ARG, help=f'''\
-list of logtypes which we want to download (separated by comma)" 1>&2
+list of logtypes which we want to download (separated by comma)
    possible values:
     - middleware: middleware.log
     - platform: platform.log of FMs
@@ -32,7 +32,10 @@ parser.add_argument('-d', '--dir-prefix', type=str, default='', help='''\
 relative path where log pack directory shall be created.
 (ex. \"path/to/downloads\", then logs will be under \"path/to/downloads/irpXXX-cXX_2024-01-30-T17-00-37)
 only irpXXX-cXX... directory will be created but no parents (for safety considerations)''')
-parser.add_argument('-n', '--num', type=int, default=DEFAULT_NUMBER_OF_LOGFILES, help=f'collect only the last <number> of logfiles, default value: {DEFAULT_NUMBER_OF_LOGFILES}')
+parser.add_argument('-n', '--num', type=int, help=f'collect only the last <number> of logfiles')
+parser.add_argument('--min-date', type=str, help='the minimum hour we need data for (format: YYYY-MM-DD.HH)')
+parser.add_argument('--max-date', type=str, help='the maximum date we need data for (format: YYYY-MM-DD.HH)')
+parser.add_argument('--i-want-a-lot', action='store_true', default=False, help='acknowledge that I want to download a lot of data (without this max. 5 logs are allowed each log type)')
 
 args = parser.parse_args()
 
@@ -53,8 +56,46 @@ want_fm_logs = list(set(logtypes) & {"middleware", "platform", "system"})
 dir_prefix=args.dir_prefix
 print(f'dir_prefix = {dir_prefix}')
 
+i_want_a_lot = args.i_want_a_lot
+print(f'i_want_a_lot = {i_want_a_lot}')
+
 number_of_logfiles=args.num
 print(f'number_of_logfiles = {number_of_logfiles}')
+if number_of_logfiles:
+    assert number_of_logfiles <= 5 or i_want_a_lot, "if you want more than 5 logfiles each log type, please specify --i-want-a-lot"
+
+def generate(min_date, max_date):
+    d = min_date
+    while d <= max_date:
+        yield d
+        d += datetime.timedelta(hours=1)
+
+min_date_str=args.min_date
+max_date_str=args.max_date
+date_patterns = []
+
+if number_of_logfiles and (min_date_str or max_date_str):
+    print('Error: you can specify either --num or (--min-date and --max-date) but not both')
+    exit(1)
+
+if min_date_str or max_date_str:
+    if not (min_date_str and max_date_str):
+        print('Error: both --min-date and --max-date has to be provided!')
+        exit(1)
+    expected_format = '^202\d-[01]\d-[0123]\d\.[012]\d$'
+    assert re.match(expected_format, min_date_str), 'min_date_str does not match the expected format'
+    assert re.match(expected_format, max_date_str), 'max_date_str does not match the expected format'
+    min_date = datetime.datetime.strptime(min_date_str, '%Y-%m-%d.%H')
+    max_date = datetime.datetime.strptime(max_date_str, '%Y-%m-%d.%H')
+    delta = max_date - min_date
+    print(min_date)
+    print(max_date)
+    print(delta)
+    assert min_date <= max_date
+    assert delta.days == 0 and delta.seconds <= 4*3600 or i_want_a_lot, 'date range is too high, please specify --i-want-a-lot if you are serious'
+    for d in generate(min_date, max_date):
+        date_patterns.append(d.strftime('%Y-%m-%d.%H'))
+    print(date_patterns)
 
 current_time=datetime.datetime.now()
 toplevel_logdir=clusters[0] + '_' + current_time.strftime('%F-T%H-%M-%S')
@@ -69,6 +110,19 @@ def download_file(scp, remote_filepath: str, local_filepath: str):
 
 print('collecting FM IPs')
 cluster_fm_ips = []
+
+def generate_ls_pattern(logfilename: str):
+    if number_of_logfiles:
+        if logfilename == 'nfs.log':
+            return f'ls {logfilename} {logfilename}.* -tr | tail --lines {number_of_logfiles}'
+        else:
+            return f'ls {logfilename}* -tr | tail --lines {number_of_logfiles}'
+    else:
+        assert False, "ez nincs megcsinalva"
+        res = 'ls'
+        for d in date_patterns:
+            res += f' {logfilename}.{d}*'
+        return res
 
 for cluster in clusters:
     ip1 = ''
@@ -92,13 +146,13 @@ for cluster in clusters:
             with paramiko_utils.agentNestedConnectWithPassword(None, ip, username="ir", password="welcome", look_for_keys=False) as client_fm:
                 logfiles = []
                 if 'middleware' in logtypes:
-                    logfiles_str = paramiko_utils.run(client_fm, f'cd /logs; ls middleware.log* -tr | tail --lines {number_of_logfiles}')
+                    logfiles_str = paramiko_utils.run(client_fm, f'cd /logs; ' + generate_ls_pattern('middleware.log'))
                     logfiles += logfiles_str.split('\n')
                 if 'platform' in logtypes:
-                    logfiles_str = paramiko_utils.run(client_fm, f'cd /logs; ls platform.log* -tr | tail --lines {number_of_logfiles}')
+                    logfiles_str = paramiko_utils.run(client_fm, f'cd /logs; ' + generate_ls_pattern('platform.log'))
                     logfiles += logfiles_str.split('\n')
                 if 'system' in logtypes:
-                    logfiles_str = paramiko_utils.run(client_fm, f'cd /logs; ls system.log* -tr | tail --lines {number_of_logfiles}')
+                    logfiles_str = paramiko_utils.run(client_fm, f'cd /logs; ' + generate_ls_pattern('system.log'))
                     logfiles += logfiles_str.split('\n')
                 print(f'logfiles = {logfiles}')
                 for logfile in logfiles:
@@ -113,6 +167,7 @@ for cluster in clusters:
         with paramiko_utils.agentNestedConnectWithPassword(None, standby_ip, username="ir", password="welcome", look_for_keys=False) as client_fm:
             bladelist_str = paramiko_utils.run(client_fm, "pureblade list --notitle | grep -v unused | cut -d' ' -f1 | cut -c7-")
             bladelist = bladelist_str.split('\n')
+            print(f'number of blades = {len(bladelist)}')
             assert len(bladelist) > 0, f'bladelist is empty, bladelist_str={bladelist_str}'
             for bladenum in bladelist:
                 print(f'cluster={cluster}, blade=ir{bladenum}')
@@ -120,16 +175,16 @@ for cluster in clusters:
                     scp = SCPClient(client_blade.get_transport())
                     logfiles = []
                     if 'nfs' in logtypes:
-                        logfiles_str = paramiko_utils.run(client_blade, f'cd /logs; ls nfs.log nfs.log.* -tr | tail --lines {number_of_logfiles}')
+                        logfiles_str = paramiko_utils.run(client_blade, f'cd /logs; ' + generate_ls_pattern('nfs.log'))
                         logfiles += logfiles_str.split('\n')
-                    if 'platform_blade' in logtypes:
-                        logfiles_str = paramiko_utils.run(client_blade, f'cd /logs; ls platform.log* -tr | tail --lines {number_of_logfiles}')
+                    if 'platform_blades' in logtypes:
+                        logfiles_str = paramiko_utils.run(client_blade, f'cd /logs; ' + generate_ls_pattern('platform.log'))
                         logfiles += logfiles_str.split('\n')
-                    if 'system_blade' in logtypes:
-                        logfiles_str = paramiko_utils.run(client_blade, f'cd /logs; ls system.log* -tr | tail --lines {number_of_logfiles}')
+                    if 'system_blades' in logtypes:
+                        logfiles_str = paramiko_utils.run(client_blade, f'cd /logs; ' + generate_ls_pattern('system.log'))
                         logfiles += logfiles_str.split('\n')
-                    if 'haproxy_blade' in logtypes:
-                        logfiles_str = paramiko_utils.run(client_blade, f'cd /logs; ls haproxy.log* -tr | tail --lines {number_of_logfiles}')
+                    if 'haproxy_blades' in logtypes:
+                        logfiles_str = paramiko_utils.run(client_blade, f'cd /logs; ' + generate_ls_pattern('haproxy.log'))
                         logfiles += logfiles_str.split('\n')
                     print(f'logfiles = {logfiles}')
                     local_blade_dir = os.path.join(toplevel_logdir, cluster, f'ir{bladenum}')
@@ -164,3 +219,7 @@ def copy_ir_test_log():
 copy_ir_test_log()
 
 print(f'\nlogdir = {toplevel_logdir}')
+with open('cd', 'w') as f:
+    lines = ['#! /bin/bash\n'
+             f'cd {toplevel_logdir}\n']
+    f.writelines(lines)
