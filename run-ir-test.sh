@@ -14,6 +14,14 @@ FEATURE_FLAGS=( \
    PS_FEATURE_FLAG_REALM_CONNECTION \
 )
 
+NFS_LOG_SERVICES=( \
+   replication::replica_link_manager \
+   replication::replication_transport_svc \
+   replication::realm_connection_manager \
+   replication::realm_connection_manager_internal \
+   replication.client \
+)
+
 retval_check () {
    RETVAL=$1
    if [ $RETVAL != 0 ]; then
@@ -64,6 +72,7 @@ usage() {
    echo "  --only-clean             when used with -x, hedghog fs+link will be only cleaned, not recreated" 1>&2
    echo "  --fsstress               running fsstress for hedgehog fs" 1>&2
    echo "  --create-datavip         creates datavip on all clusters" 1>&2
+   echo "  --nfs-debug-log          turns on nfs debug logs" 1>&2
    echo "  -h              help" 1>&2
    echo "" 1>&2
    echo "examples:" 1>&2
@@ -125,6 +134,7 @@ while getopts "idarceflt:xh-:" OPT; do
       only-clean) X_ONLY_CLEAN=1 ;;
       fsstress) RUN_FSSTRESS=1 ;;
       create-datavip) CREATE_DATA_VIP=1 ;;
+      nfs-debug-log) NFS_DEBUG_LOG=1 ;;
       h) usage ;;
       *) die "Error: Unknown option detected: [$OPT], use option -h to see options";;
    esac
@@ -272,6 +282,24 @@ if [ "$DEBUG_VERSION" == "1" ] || [ "$RELEASE_VERSION" == "1" ] || [ "$TREE_DEPL
    done
    echo "---> sleeping for 20 sec <---"
    sleep 20
+fi
+
+if [ "$NFS_DEBUG_LOG" == "1" ]; then
+   echo -ne "---> enabling NFS debug log for services:\n   "
+   for SERVICE in ${NFS_LOG_SERVICES[@]}; do
+      echo -n " [$SERVICE]"
+   done
+   echo
+
+   for CLUSTER in ${CLUSTERS[@]}; do
+      echo "---> enabling NFS debug log for [$CLUSTER] <--- [$(date)]"
+      # TODO: concat fbdiag commands with && and have only one ssh call
+      for SERVICE in ${NFS_LOG_SERVICES[@]}; do
+         sshpass -p welcome ssh $SSHARGS \
+            ir@$CLUSTER \
+            "exec.py -na \"fbdiag nfs-diag-level '$SERVICE=debug' -v\""
+      done
+   done
 fi
 
 if [ "$UPDATE_APPLIANCE_ID" == "1" ]; then
