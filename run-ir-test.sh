@@ -1,12 +1,17 @@
 #! /bin/bash
-CLUSTERS_DEFAULT=(irp871-c76 irp871-c77)
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+NC='\033[0m'
+
+#CLUSTERS_DEFAULT=(irp871-c76 irp871-c77)
+CLUSTERS_DEFAULT=()
 printf -v CLUSTERS_DEFAULT_JOINED_EXTRA_COMMA '%s,' "${CLUSTERS_DEFAULT[@]}"
 CLUSTERS_DEFAULT_JOINED="${CLUSTERS_DEFAULT_JOINED_EXTRA_COMMA%,}"
 DEFAULT_DEPLOY_TARGETS="middleware,cpp_release,feature-flags-system,feature-flags-admin,pure-cli,etcd,admin,inuk,plugins,netconf"
 
 FEATURE_FLAGS=( \
-   PS_FEATURE_FLAG_MULTITENANCY_WAVE2 \
-   PS_FEATURE_FLAG_MANAGEMENT_ACCESS_POLICY \
+   PS_FEATURE_FLAG_MULTITENANCY_REPLICATION \
+   PS_FEATURE_FLAG_REALM_CONNECTION \
 )
 
 retval_check () {
@@ -36,6 +41,9 @@ usage() {
    echo "  --deploy-targets=<targets>    comma separated list of targets to tree deploy" 1>&2
    echo "                                for the list of targets see: ./run tools/remote/tree_deploy.py -h" 1>&2
    echo "                                Default: $DEFAULT_DEPLOY_TARGETS" 1>&2
+   echo "  --debug                       use debug version (need to specify only once when switching)" 1>&2
+   echo "  --release                     use release version (need to specify only once when switching)" 1>&2
+   echo "" 1>&2
    echo "" 1>&2
    echo "  -a                       update appliance_id" 1>&2
    echo "                           change to 00000000-0000-4000-8000-00000000000X, where X = 1,2,3,..." 1>&2
@@ -45,11 +53,14 @@ usage() {
    echo "  -c                       create array connection between arrays" 1>&2
    echo "  --reverse-connect        when used with -c, second cluster is going to be the source array" 1>&2
    echo "                           and first one is going to be the target array" 1>&2
-   echo "  -e              exchange certificates" 1>&2
-   echo "  -f              turning on feature flags on clusters" 1>&2
-   echo "  -l              clean logs (on FMs & blades: /logs/*)" 1>&2
-   echo "  -t <num>        running numbered test, with 0 it lists available testcases" 1>&2
-   echo "  -x              temp: deleting hedghog fs+link and recreating it (with link)" 1>&2
+   echo "  --realm-connection=<X>   create realm connection, X is like \"cluster1::realm1,cluster2::realm2\"" 1>&2
+   echo "  --create-realms          create realms when creating realm connection (if don't exist)" 1>&2
+   echo "  -e                       exchange certificates" 1>&2
+   echo "  -f                       turning on feature flags on clusters" 1>&2
+   echo "  --reset-feature-flags    disable every extra feature flags, reset system to the base state" 1>&2
+   echo "  -l                       clean logs (on FMs & blades: /logs/*)" 1>&2
+   echo "  -t <num>                 running numbered test, with 0 it lists available testcases" 1>&2
+   echo "  -x                       temp: deleting hedghog fs+link and recreating it (with link)" 1>&2
    echo "  --only-clean             when used with -x, hedghog fs+link will be only cleaned, not recreated" 1>&2
    echo "  --fsstress               running fsstress for hedgehog fs" 1>&2
    echo "  --create-datavip         creates datavip on all clusters" 1>&2
@@ -92,13 +103,22 @@ while getopts "idarceflt:xh-:" OPT; do
       branch) needs_arg; BRANCH=$OPTARG ;;
       d) TREE_DEPLOY=1 ;;
       deploy-targets) needs_arg; DEPLOY_TARGETS=$OPTARG ;;
+      debug) DEBUG_VERSION=1 ;;
+      release) RELEASE_VERSION=1 ;;
       a) UPDATE_APPLIANCE_ID=1 ;;
       revert-appliance-ids) REVERT_APPLIANCE_ID=1 ;;
       r) CREATE_REPLICATION_VIP=1 ;;
       c) CONNECT_ARRAYS=1 ;;
       reverse-connect) C_REVERSE_CONNECT=1 ;;
+      realm-connection)
+         needs_arg
+         REALM_CONNECTION_ARGS_JOINED=$OPTARG
+         REALM_CONNECTION_ARGS=$(echo "$REALM_CONNECTION_ARGS_JOINED" | sed -e "s/,/ /g")
+         REALMS=($REALM_CONNECTION_ARGS)
+         ;;
       e) EXCHANGE_CERTIFICATES=1 ;;
       f) SET_FEATURE_FLAGS=1 ;;
+      reset-feature-flags) RESET_FEATURE_FLAGS=1 ;;
       l) CLEAN_LOGS=1 ;;
       t) RUN_TEST=1; TEST_NUM=$OPTARG ;;
       x) X_RECREATE_HEDGEHOG=1 ;;
@@ -121,11 +141,25 @@ for CLUSTER in ${CLUSTERS[@]}; do
 done
 echo
 
+if [ ! -z "$REALM_CONNECTION_ARGS_JOINED" ]; then
+   echo -ne "Realms to create connection between:\n   "
+   for REALM in ${REALMS[@]}; do
+      echo -n " [$REALM]"
+   done
+   REALM_CONNECTION=1
+fi
+echo
+
 if [ -z "$DEPLOY_TARGETS" ]; then
    DEPLOY_TARGETS=$DEFAULT_DEPLOY_TARGETS
 fi
 date
 echo
+
+if [ "$DEBUG_VERSION" == "1" ] && [ "$RELEASE_VERSION" == "1" ]; then
+   echo "Please specify either '--debug' or '--release' but not both!"
+   exit 1
+fi
 
 if [ "$INITIATE_CLUSTER" == "1" ] || [ "$RUN_TEST" == "1" ]; then
    if [ -z "$SHA" ]; then
@@ -150,6 +184,20 @@ if [ "$INITIATE_CLUSTER" == "1" ]; then
    retval_check $?
 fi
 
+if [ "$DEBUG_VERSION" == "1" ]; then
+   for CLUSTER in ${CLUSTERS[@]}; do
+      echo "---> changing to debug version on cluster [$CLUSTER] <--- [$(date)]"
+      time ./run tools/remote/deploy_env.py -a $CLUSTER -xa -sa -na --debug-sw
+   done
+fi
+
+if [ "$RELEASE_VERSION" == "1" ]; then
+   for CLUSTER in ${CLUSTERS[@]}; do
+      echo "---> changing to release version on cluster [$CLUSTER] <--- [$(date)]"
+      time ./run tools/remote/deploy_env.py -a $CLUSTER -xa -sa -na --defaults
+   done
+fi
+
 if [ "$TREE_DEPLOY" == "1" ]; then
    git show --quiet
    git status
@@ -166,24 +214,24 @@ if [ "$TREE_DEPLOY" == "1" ]; then
    echo "---> git diff <---" >> deployed
    git diff >> deployed
 
+   SA_TARGETS=""
+   NA_TARGETS=""
+   SA_NA_TARGETS=""
+
+   for target in middleware alerts; do
+      if [ ! -z "$(echo $DEPLOY_TARGETS | grep $target)" ]; then SA_TARGETS="$SA_TARGETS $target"; fi
+   done
+
+   for target in cpp_release cpp_debug cpp_asan; do
+      if [ ! -z "$(echo $DEPLOY_TARGETS | grep $target)" ]; then NA_TARGETS="$NA_TARGETS $target"; fi
+   done
+
+   for target in feature-flags-system feature-flags-admin pure-cli etcd admin plugins netconf inuk irlib; do
+      if [ ! -z "$(echo $DEPLOY_TARGETS | grep $target)" ]; then SA_NA_TARGETS="$SA_NA_TARGETS $target"; fi
+   done
+
    echo "---> targets to deploy: DEPLOY_TARGETS=[$DEPLOY_TARGETS] <---"
    for CLUSTER in ${CLUSTERS[@]}; do
-      SA_TARGETS=""
-      NA_TARGETS=""
-      SA_NA_TARGETS=""
-
-      for target in middleware; do
-         if [ ! -z "$(echo $DEPLOY_TARGETS | grep $target)" ]; then SA_TARGETS="$SA_TARGETS $target"; fi
-      done
-
-      for target in cpp_release; do
-         if [ ! -z "$(echo $DEPLOY_TARGETS | grep $target)" ]; then NA_TARGETS="$NA_TARGETS $target"; fi
-      done
-
-      for target in feature-flags-system feature-flags-admin pure-cli etcd admin plugins netconf inuk; do
-         if [ ! -z "$(echo $DEPLOY_TARGETS | grep $target)" ]; then SA_NA_TARGETS="$SA_NA_TARGETS $target"; fi
-      done
-
       if [ ! -z "$SA_TARGETS" ]; then
          echo "---> tree deploy to cluster [$CLUSTER]: SA_TARGETS=[$SA_TARGETS] <---"
          time ./run tools/remote/tree_deploy.py -v -a $CLUSTER -sa $SA_TARGETS
@@ -200,17 +248,24 @@ if [ "$TREE_DEPLOY" == "1" ]; then
          retval_check $?
       fi
    done
+fi
 
+if [ "$DEBUG_VERSION" == "1" ] || [ "$RELEASE_VERSION" == "1" ] || [ "$TREE_DEPLOY" == "1" ]; then
    for CLUSTER in ${CLUSTERS[@]}; do
       echo "---> restarting cluster [$CLUSTER] <--- [$(date)]"
-      RESTART_TARGETS=""
-      if [ ! -z "$SA_TARGETS" ] || [ ! -z "$SA_NA_TARGETS" ]; then
-         RESTART_TARGETS="$RESTART_TARGETS -sa "
+      # if there's only tree deploy -> restart what has been populated
+      # if it's debug/release switch -> restart everything
+      if [ "$DEBUG_VERSION" == "1" ] || [ "$RELEASE_VERSION" == "1" ]; then
+         RESTART_TARGETS=" -sa -na "
+      else
+         RESTART_TARGETS=""
+         if [ ! -z "$SA_TARGETS" ] || [ ! -z "$SA_NA_TARGETS" ]; then
+            RESTART_TARGETS="$RESTART_TARGETS -sa "
+         fi
+         if [ ! -z "$NA_TARGETS" ] || [ ! -z "$SA_NA_TARGETS" ]; then
+            RESTART_TARGETS="$RESTART_TARGETS -na "
+         fi
       fi
-      if [ ! -z "$NA_TARGETS" ] || [ ! -z "$SA_NA_TARGETS" ]; then
-         RESTART_TARGETS="$RESTART_TARGETS -na "
-      fi
-      RESTART_TARGETS=" -sa -na " # override
       echo "---> RESTART_TARGETS=[$RESTART_TARGETS] <--- [$(date)]"
       time ./run tools/remote/restart_sw.py --wait $RESTART_TARGETS restart -a $CLUSTER
       retval_check $?
@@ -338,6 +393,52 @@ if [ "$CONNECT_ARRAYS" == "1" ]; then
    retval_check $?
 fi
 
+if [ "$REALM_CONNECTION" == "1" ]; then
+   echo "---> connecting realms <--- [$(date)]"
+   SOURCE_CLUSTER=$(echo "${REALMS[0]}" | cut -d':' -f1)
+   TARGET_CLUSTER=$(echo "${REALMS[1]}" | cut -d':' -f1)
+   SOURCE_REALM=$(echo "${REALMS[0]}" | cut -d':' -f3)
+   TARGET_REALM=$(echo "${REALMS[1]}" | cut -d':' -f3)
+   echo "---> SOURCE_REALM = [$SOURCE_CLUSTER][$SOURCE_REALM], TARGET_REALM = [$TARGET_CLUSTER][$TARGET_REALM] <--- [$(date)]"
+   ANY_REALM_MISSING=0
+   RESULT=$(sshpass -p welcome ssh $SSHARGS \
+      ir@$SOURCE_CLUSTER \
+      "purerealm list --notitle $SOURCE_REALM | grep '\<$SOURCE_REALM\>'")
+   if [ -z "$RESULT" ]; then
+      echo -e "---> $SOURCE_REALM ${RED}doesn't exist${NC} on cluster $SOURCE_CLUSTER <--- [$(date)]"
+      ANY_REALM_MISSING=1
+   else
+      echo -e "---> $SOURCE_REALM ${GREEN}exist${NC} on cluster $SOURCE_CLUSTER <--- [$(date)]"
+   fi
+   RESULT=$(sshpass -p welcome ssh $SSHARGS \
+      ir@$TARGET_CLUSTER \
+      "purerealm list --notitle $TARGET_REALM | grep '\<$TARGET_REALM\>'")
+   if [ -z "$RESULT" ]; then
+      echo -e "---> $TARGET_REALM ${RED}doesn't exist${NC} on cluster $TARGET_CLUSTER <--- [$(date)]"
+      ANY_REALM_MISSING=1
+   else
+      echo -e "---> $TARGET_REALM ${GREEN}exist${NC} on cluster $TARGET_CLUSTER <--- [$(date)]"
+   fi
+   if [ "$ANY_REALM_MISSING" == "1" ]; then
+      echo -e "---> exitting because of ${RED}missing realm${NC} <--- [$(date)]"
+      exit 1
+   fi
+   REALM_CONNECTION_KEY=$(sshpass -p welcome ssh $SSHARGS \
+      ir@$TARGET_CLUSTER \
+      "purerealm connection key create $TARGET_REALM" | tail -n 1 | tr -s ' ' | cut -d ' ' -f 8)
+   retval_check $?
+   if [ -z "$REALM_CONNECTION_KEY" ]; then
+      echo -e "---> REALM_CONNECTION_KEY ${RED}is empty${NC} (from $TARGET_CLUSTER::$TARGET_REALM) <--- [$(date)]"
+      ANY_REALM_MISSING=1
+   fi
+   # TODO: show last few characters
+   echo "REALM_CONNECTION_KEY=[${REALM_CONNECTION_KEY:0:34}...] <--- [$(date)]"
+   sshpass -p welcome ssh $SSHARGS \
+      ir@$SOURCE_CLUSTER \
+      "echo "$REALM_CONNECTION_KEY" | purerealm connection create --remote $TARGET_REALM $SOURCE_REALM"
+   retval_check $?
+fi
+
 if [ "$EXCHANGE_CERTIFICATES" == "1" ]; then
    echo "---> downloading certificates <---"
    for CLUSTER in ${CLUSTERS[@]}; do
@@ -378,22 +479,24 @@ if [ "$EXCHANGE_CERTIFICATES" == "1" ]; then
    done
 fi
 
-if [ "$SET_FEATURE_FLAGS" == "1" ]; then
-   echo "---> turning on feature flags <--- [$(date)]"
+if [ "$SET_FEATURE_FLAGS" == "1" ] || [ "$RESET_FEATURE_FLAGS" == "1" ]; then
+   echo "---> handling feature flags <--- [$(date)]"
    for CLUSTER in ${CLUSTERS[@]}; do
-      echo "CLUSTER = [$CLUSTER]"
+      echo "---> resetting feature flags, CLUSTER = [$CLUSTER] <--- [$(date)]"
       sshpass -p welcome ssh $SSHARGS \
          ir@$CLUSTER \
          "exec.py -na -sa \"sudo purefeatureflags reset-all\""
       retval_check $?
 
-      for FEATURE_FLAG in ${FEATURE_FLAGS[@]}; do
-         echo "---> turning on feature flag: [$FEATURE_FLAG] <--- [$(date)]"
-         sshpass -p welcome ssh $SSHARGS \
-            ir@$CLUSTER \
-            "exec.py -na -sa \"sudo purefeatureflags enable --flags $FEATURE_FLAG\""
-         retval_check $?
-      done
+      if [ -z "$RESET_FEATURE_FLAGS" ]; then
+         for FEATURE_FLAG in ${FEATURE_FLAGS[@]}; do
+            echo "---> turning on feature flag: [$FEATURE_FLAG] <--- [$(date)]"
+            sshpass -p welcome ssh $SSHARGS \
+               ir@$CLUSTER \
+               "exec.py -na -sa \"sudo purefeatureflags enable --flags $FEATURE_FLAG\""
+            retval_check $?
+         done
+      fi
       echo "---> restarting cluster [$CLUSTER] <--- [$(date)]"
       time ./run tools/remote/restart_sw.py --wait -na -sa restart -a $CLUSTER
       retval_check $?
@@ -507,6 +610,13 @@ declare -A TEST_DICT=( \
    [2]="ir_test/functional/replication/replication_throttling.py::test_throttling_trio" \
    [3]="ir_test/functional/replication/test_tc.py" \
    [4]="ir_test/functional/replication/test_replication_with_nfsd_restart.py -k restart_one_or_two_blades_per_resgrp" \
+   [5]="ir_test/functional/cli/purepolicy_test.py::test_purepolicy_list_member" \
+   [6]="ir_test/functional/replication/test_replica_links.py::test_replica_link_delete_and_relink" \
+   [7]="ir_test/functional/replication/test_replication_encryption.py::test_fb_to_fb_secure_repl_nfsd_traffic[0-False]" \
+   [8]="ir_test/functional/uiscale_replication_inuk_mocker/scale_snapshot_policy_scheduler_test.py" \
+   [9]="ir_test/functional/python_rest_client/test-replication-file/test_file_system_replica_link_transfer_api.py" \
+   [10]="ir_test/functional/python_rest_client/test-replication-file/test_file_system_replica_link_transfer_api.py[REST=2.18,Auth=auth_api_token-0]" \
+   [11]="ir_test/functional/cli/pureaudit_coverage_test.py::test_pureaudit_matches_found_replication_with_connection ir_test/functional/cli/purefs_test.py::test_purefs_replication_audit" \
 )
 
 if [ "$RUN_TEST" == "1" ]; then
@@ -539,19 +649,36 @@ if [ "$RUN_TEST" == "1" ]; then
 
    echo "---> running the test <--- [$(date)]"
    echo "---> TEST_NUM=[$TEST_NUM], TESTCASE=[$TESTCASE] <--- [$(date)]"
-   time PS_FEATURE_FLAG_ENCRYPTED_FILE_REPLICATION=true AD_TEST_DOMAINS="dc=ir-jad2019,dc=local" ./run ir_test/exec_test \
-      --update_initiators=0 \
+   # PS_FEATURE_FLAG_ENCRYPTED_FILE_REPLICATION=true
+   # INSTALL_PYTHON_REST_CLIENT=1
+   # export INSTALL_PYTHON_REST_CLIENT=1
+   # time AD_TEST_DOMAINS="dc=ir-jad2019,dc=local" ./run ir_test/exec_test \
+   #    --update_initiators=0 \
+   #    --verbose \
+   #    --color=yes \
+   #    --show-capture=no \
+   #    --exitfirst \
+   #    --config ${CLUSTERS[0]} \
+   #    $TESTCASE
+   echo "export INSTALL_PYTHON_REST_CLIENT=1; \
+      ir_test/exec_test \
       --verbose \
-      --config ${CLUSTERS[0]} \
-      $TESTCASE
+      --color=yes \
+      --show-capture=no \
+      --exitfirst \
+      --run-only-replication-sim \
+      --config \'${CLUSTERS[0]}\' \
+      $TESTCASE" > script.sh
+   chmod u+x script.sh
+   echo -e "script.sh:\n---------------------"
+   cat script.sh
+   echo "---------------------"
+   time AD_TEST_DOMAINS="dc=ir-jad2019,dc=local" ./run /bin/bash -c ./script.sh
    TEST_RESULT=$?
 
    echo "---> collecting the logs <---"
-   time collect.sh -d triage -c $CLUSTERS_JOINED -l platform,middleware,nfs,platform_blades,system,system_blades -n 2
+   time python3 ~/work/misc/collect.py -d triage -c $CLUSTERS_JOINED -l platform,middleware,nfs,platform_blades,system,system_blades -n 3
 
-   RED='\033[0;31m'
-   GREEN='\033[0;32m'
-   NC='\033[0m'
    if [ "$TEST_RESULT" == "0" ]; then
       echo -e "\n${GREEN}SUCCESS${NC}\n"
    else
