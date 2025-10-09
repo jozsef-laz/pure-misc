@@ -16,12 +16,13 @@ done
 # branches to sync
 usual_branches=( \
    master \
-   area/pasg \
+   dev \
 )
 all_branches=${usual_branches[@]}
 all_branches+=( \
-   dev \
+   area/pasg \
    rel4-6-0 \
+   rel4-6-cde \
 )
 
 if [ "$ALL_BRANCHES" == "1" ]; then
