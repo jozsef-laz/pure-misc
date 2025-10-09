@@ -117,7 +117,6 @@ def generate_ls_pattern(logfilename: str):
         else:
             return f'ls {logfilename}* -tr | tail --lines {number_of_logfiles}'
     else:
-        assert False, "ez nincs megcsinalva"
         res = 'ls'
         for d in date_patterns:
             res += f' {logfilename}.{d}*'
