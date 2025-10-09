@@ -436,7 +436,7 @@ if [ "$REALM_CONNECTION" == "1" ]; then
       echo -e "---> $SOURCE_REALM ${RED}doesn't exist${NC} on cluster $SOURCE_CLUSTER <--- [$(date)]"
       ANY_REALM_MISSING=1
    else
-      echo -e "---> $SOURCE_REALM ${GREEN}exist${NC} on cluster $SOURCE_CLUSTER <--- [$(date)]"
+      echo -e "---> $SOURCE_REALM ${GREEN}exists${NC} on cluster $SOURCE_CLUSTER <--- [$(date)]"
    fi
    RESULT=$(sshpass -p welcome ssh $SSHARGS \
       ir@$TARGET_CLUSTER \
@@ -445,7 +445,7 @@ if [ "$REALM_CONNECTION" == "1" ]; then
       echo -e "---> $TARGET_REALM ${RED}doesn't exist${NC} on cluster $TARGET_CLUSTER <--- [$(date)]"
       ANY_REALM_MISSING=1
    else
-      echo -e "---> $TARGET_REALM ${GREEN}exist${NC} on cluster $TARGET_CLUSTER <--- [$(date)]"
+      echo -e "---> $TARGET_REALM ${GREEN}exists${NC} on cluster $TARGET_CLUSTER <--- [$(date)]"
    fi
    if [ "$ANY_REALM_MISSING" == "1" ]; then
       echo -e "---> exitting because of ${RED}missing realm${NC} <--- [$(date)]"
@@ -457,7 +457,7 @@ if [ "$REALM_CONNECTION" == "1" ]; then
    retval_check $?
    if [ -z "$REALM_CONNECTION_KEY" ]; then
       echo -e "---> REALM_CONNECTION_KEY ${RED}is empty${NC} (from $TARGET_CLUSTER::$TARGET_REALM) <--- [$(date)]"
-      ANY_REALM_MISSING=1
+      exit 1
    fi
    # TODO: show last few characters
    echo "REALM_CONNECTION_KEY=[${REALM_CONNECTION_KEY:0:34}...] <--- [$(date)]"
