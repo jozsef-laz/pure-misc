@@ -7,7 +7,7 @@ NC='\033[0m'
 CLUSTERS_DEFAULT=()
 printf -v CLUSTERS_DEFAULT_JOINED_EXTRA_COMMA '%s,' "${CLUSTERS_DEFAULT[@]}"
 CLUSTERS_DEFAULT_JOINED="${CLUSTERS_DEFAULT_JOINED_EXTRA_COMMA%,}"
-DEFAULT_DEPLOY_TARGETS="middleware,cpp_release,feature-flags-system,feature-flags-admin,pure-cli,etcd,admin,inuk,plugins,netconf"
+#DEFAULT_DEPLOY_TARGETS="middleware,cpp_release,feature-flags-system,feature-flags-admin,pure-cli,etcd,admin,inuk,plugins,netconf"
 
 FEATURE_FLAGS=( \
    PS_FEATURE_FLAG_MULTITENANCY_REPLICATION \
@@ -45,7 +45,6 @@ usage() {
    echo "  --branch=<branch>        the branch where the latest available sha shall be used" 1>&2
    echo "                           if both --sha and --branch is specified, --sha is going to be used" 1>&2
    echo "" 1>&2
-   echo "  -d                            tree deploy" 1>&2
    echo "  --deploy-targets=<targets>    comma separated list of targets to tree deploy" 1>&2
    echo "                                for the list of targets see: ./run tools/remote/tree_deploy.py -h" 1>&2
    echo "                                Default: $DEFAULT_DEPLOY_TARGETS" 1>&2
@@ -110,7 +109,6 @@ while getopts "idarceflt:xh-:" OPT; do
       i) INITIATE_CLUSTER=1 ;;
       sha) needs_arg; SHA=$OPTARG ;;
       branch) needs_arg; BRANCH=$OPTARG ;;
-      d) TREE_DEPLOY=1 ;;
       deploy-targets) needs_arg; DEPLOY_TARGETS=$OPTARG ;;
       debug) DEBUG_VERSION=1 ;;
       release) RELEASE_VERSION=1 ;;
@@ -141,6 +139,9 @@ while getopts "idarceflt:xh-:" OPT; do
 done
 shift $((OPTIND-1))
 
+date
+echo
+
 if [ -z "$CLUSTERS_JOINED" ]; then
    CLUSTERS_JOINED=$CLUSTERS_DEFAULT_JOINED
    CLUSTERS=("${CLUSTERS_DEFAULT[@]}")
@@ -158,12 +159,6 @@ if [ ! -z "$REALM_CONNECTION_ARGS_JOINED" ]; then
    done
    REALM_CONNECTION=1
 fi
-echo
-
-if [ -z "$DEPLOY_TARGETS" ]; then
-   DEPLOY_TARGETS=$DEFAULT_DEPLOY_TARGETS
-fi
-date
 echo
 
 if [ "$DEBUG_VERSION" == "1" ] && [ "$RELEASE_VERSION" == "1" ]; then
@@ -208,7 +203,7 @@ if [ "$RELEASE_VERSION" == "1" ]; then
    done
 fi
 
-if [ "$TREE_DEPLOY" == "1" ]; then
+if [ ! -z "$DEPLOY_TARGETS" ]; then
    git show --quiet
    git status
    rm -f deployed
@@ -260,7 +255,7 @@ if [ "$TREE_DEPLOY" == "1" ]; then
    done
 fi
 
-if [ "$DEBUG_VERSION" == "1" ] || [ "$RELEASE_VERSION" == "1" ] || [ "$TREE_DEPLOY" == "1" ]; then
+if [ "$DEBUG_VERSION" == "1" ] || [ "$RELEASE_VERSION" == "1" ] || [ ! -z "$DEPLOY_TARGETS" ]; then
    for CLUSTER in ${CLUSTERS[@]}; do
       echo "---> restarting cluster [$CLUSTER] <--- [$(date)]"
       # if there's only tree deploy -> restart what has been populated
