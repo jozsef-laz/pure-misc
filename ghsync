@@ -51,19 +51,23 @@ if [ "$FETCH" == "1" ]; then
    if [ "$ALL_BRANCHES" == "1" ]; then
       echo "--> pulling LAMELLA repo"
       git -C object pull --quiet --prune --ff-only
-      echo "lamella [DIR=object] retval=[$?]"
+      echo "[DIR=object] retval=[$?]"
 
       # echo "--> pulling ALLOY repo"
       # git -C tpc/alloy_sync pull --quiet --prune --ff-only
-      # echo "alloy [DIR=tpc/alloy_sync] retval=[$?]"
+      # echo "[DIR=tpc/alloy_sync] retval=[$?]"
 
       echo "--> pulling FUSION repo"
       git -C fusion-shared pull --quiet --prune --ff-only
-      echo "fusion [DIR=fusion-shared] retval=[$?]"
+      echo "[DIR=fusion-shared] retval=[$?]"
 
       echo "--> pulling dsx repo"
       git -C dsx pull --quiet --prune --ff-only
-      echo "dsx [DIR=dsx] retval=[$?]"
+      echo "[DIR=dsx] retval=[$?]"
+
+      echo "--> pulling pure-cc-tests repo"
+      git -C pure-cc-tests pull --quiet --prune --ff-only
+      echo "[DIR=pure-cc-tests] retval=[$?]"
    fi
 fi
 
