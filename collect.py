@@ -129,11 +129,24 @@ def generate_ls_pattern(logfilename: str):
 def add_fs_list(existing_list: list[str], new_list: list[str]):
     [existing_list.append(s) for s in new_list if s]
 
+clusters_w_qa1_pass = ['batman', 'newt']
+clusters_w_qa2_pass = ['krtek']
+# getting passwords from env vars, because I don't want to put them in version control
+pw_qa1=os.environ['PASSWORD_QA1']
+pw_qa2=os.environ['PASSWORD_QA2']
+pw_simple=os.environ['PASSWORD_SIMPLE']
 for cluster in clusters:
+    if cluster in clusters_w_qa1_pass:
+        pw = pw_qa1
+    elif cluster in clusters_w_qa2_pass:
+        pw = pw_qa2
+    else:
+        pw = pw_simple
+
     ip1 = ''
     ip2 = ''
     master_fm = 0
-    with paramiko_utils.agentNestedConnectWithPassword(None, cluster, username="ir", password="welcome", look_for_keys=False) as client:
+    with paramiko_utils.agentNestedConnectWithPassword(None, cluster, username="ir", password=pw, look_for_keys=False) as client:
         ip1 = paramiko_utils.run(client, f"purenetwork list --csv | grep 'fm1.admin0,' | cut -d',' -f5")
         ip2 = paramiko_utils.run(client, f"purenetwork list --csv | grep 'fm2.admin0,' | cut -d',' -f5")
         master_fm = int(paramiko_utils.run(client, "puremastership list | grep master | cut -d'M' -f2 | cut -c1-1"))
@@ -148,7 +161,7 @@ for cluster in clusters:
             print(f'fm_num={fm_num}, ip={ip}, fm_dir={fm_dir}')
 
             os.makedirs(fm_dir)
-            with paramiko_utils.agentNestedConnectWithPassword(None, ip, username="ir", password="welcome", look_for_keys=False) as client_fm:
+            with paramiko_utils.agentNestedConnectWithPassword(None, ip, username="ir", password=pw, look_for_keys=False) as client_fm:
                 logfiles = []
                 if 'middleware' in logtypes:
                     logfiles_str = paramiko_utils.run(client_fm, f'cd /logs; ' + generate_ls_pattern('middleware.log'))
@@ -172,7 +185,7 @@ for cluster in clusters:
         # standby_fm is indexed from 0!
         standby_fm = 0 if master_fm == 2 else 1
         standby_ip = (ip1, ip2)[standby_fm]
-        with paramiko_utils.agentNestedConnectWithPassword(None, standby_ip, username="ir", password="welcome", look_for_keys=False) as client_fm:
+        with paramiko_utils.agentNestedConnectWithPassword(None, standby_ip, username="ir", password=pw, look_for_keys=False) as client_fm:
             bladelist_str = paramiko_utils.run(client_fm, "pureblade list --notitle | grep -v unused | cut -d' ' -f1 | cut -c7-")
             bladelist = bladelist_str.split('\n')
             print(f'number of blades = {len(bladelist)}')
