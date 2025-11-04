@@ -19,6 +19,7 @@ parser.add_argument('-l', '--logtypes', type=str, default=LOGTYPES_DEFAULT_ARG, 
 list of logtypes which we want to download (separated by comma)
    possible values:
     - middleware: middleware.log
+    - middleware_db_dump
     - platform: platform.log of FMs
     - platform_blades: platform.log of blades
     - nfs: nfs.log of blades
@@ -50,7 +51,7 @@ logtypes=args.logtypes.split(',')
 print(f'logtypes = {logtypes}')
 assert len(logtypes) > 0, 'len(logtypes) is 0'
 want_blade_logs = list(set(logtypes) & {"nfs", "platform_blades", "system_blades", "haproxy_blades"})
-want_fm_logs = list(set(logtypes) & {"middleware", "platform", "system"})
+want_fm_logs = list(set(logtypes) & {"middleware", "middleware_db_dump", "platform", "system"})
 
 dir_prefix=args.dir_prefix
 print(f'dir_prefix = {dir_prefix}')
@@ -122,6 +123,9 @@ def generate_ls_pattern(logfilename: str):
             res += f' {logfilename}.{d}*'
         return res
 
+def add_fs_list(existing_list: list[str], new_list: list[str]):
+    [existing_list.append(s) for s in new_list if s]
+
 for cluster in clusters:
     ip1 = ''
     ip2 = ''
@@ -145,13 +149,16 @@ for cluster in clusters:
                 logfiles = []
                 if 'middleware' in logtypes:
                     logfiles_str = paramiko_utils.run(client_fm, f'cd /logs; ' + generate_ls_pattern('middleware.log'))
-                    logfiles += logfiles_str.split('\n')
+                    add_fs_list(logfiles, logfiles_str.split('\n'))
+                if 'middleware_db_dump' in logtypes:
+                    logfiles_str = paramiko_utils.run(client_fm, f'cd /logs; ' + generate_ls_pattern('middleware_db_dump'))
+                    add_fs_list(logfiles, logfiles_str.split('\n'))
                 if 'platform' in logtypes:
                     logfiles_str = paramiko_utils.run(client_fm, f'cd /logs; ' + generate_ls_pattern('platform.log'))
-                    logfiles += logfiles_str.split('\n')
+                    add_fs_list(logfiles, logfiles_str.split('\n'))
                 if 'system' in logtypes:
                     logfiles_str = paramiko_utils.run(client_fm, f'cd /logs; ' + generate_ls_pattern('system.log'))
-                    logfiles += logfiles_str.split('\n')
+                    add_fs_list(logfiles, logfiles_str.split('\n'))
                 print(f'logfiles = {logfiles}')
                 for logfile in logfiles:
                     scp = SCPClient(client_fm.get_transport())
@@ -174,16 +181,16 @@ for cluster in clusters:
                     logfiles = []
                     if 'nfs' in logtypes:
                         logfiles_str = paramiko_utils.run(client_blade, f'cd /logs; ' + generate_ls_pattern('nfs.log'))
-                        logfiles += logfiles_str.split('\n')
+                        add_fs_list(logfiles, logfiles_str.split('\n'))
                     if 'platform_blades' in logtypes:
                         logfiles_str = paramiko_utils.run(client_blade, f'cd /logs; ' + generate_ls_pattern('platform.log'))
-                        logfiles += logfiles_str.split('\n')
+                        add_fs_list(logfiles, logfiles_str.split('\n'))
                     if 'system_blades' in logtypes:
                         logfiles_str = paramiko_utils.run(client_blade, f'cd /logs; ' + generate_ls_pattern('system.log'))
-                        logfiles += logfiles_str.split('\n')
+                        add_fs_list(logfiles, logfiles_str.split('\n'))
                     if 'haproxy_blades' in logtypes:
                         logfiles_str = paramiko_utils.run(client_blade, f'cd /logs; ' + generate_ls_pattern('haproxy.log'))
-                        logfiles += logfiles_str.split('\n')
+                        add_fs_list(logfiles, logfiles_str.split('\n'))
                     print(f'logfiles = {logfiles}')
                     local_blade_dir = os.path.join(toplevel_logdir, cluster, f'ir{bladenum}')
                     os.makedirs(local_blade_dir)
