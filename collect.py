@@ -70,8 +70,8 @@ def generate(min_date, max_date):
         yield d
         d += datetime.timedelta(hours=1)
 
-min_date_str=args.min_date
-max_date_str=args.max_date
+min_date_str = args.min_date
+max_date_str = args.max_date
 date_patterns = []
 
 if number_of_logfiles and (min_date_str or max_date_str):
@@ -82,9 +82,12 @@ if min_date_str or max_date_str:
     if not (min_date_str and max_date_str):
         print('Error: both --min-date and --max-date has to be provided!')
         exit(1)
-    expected_format = '^202\d-[01]\d-[0123]\d\.[012]\d$'
+    # allowing 'T' before the hours, because in ir_test.log this is the format, so copy-paste will be easier
+    expected_format = '^202\d-[01]\d-[0123]\d[\.T][012]\d$'
     assert re.match(expected_format, min_date_str), 'min_date_str does not match the expected format'
     assert re.match(expected_format, max_date_str), 'max_date_str does not match the expected format'
+    min_date_str = min_date_str.replace('T', '.')
+    max_date_str = max_date_str.replace('T', '.')
     min_date = datetime.datetime.strptime(min_date_str, '%Y-%m-%d.%H')
     max_date = datetime.datetime.strptime(max_date_str, '%Y-%m-%d.%H')
     delta = max_date - min_date
