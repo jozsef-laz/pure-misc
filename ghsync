@@ -17,6 +17,7 @@ done
 usual_branches=( \
    master \
    dev \
+   rel4-6-fg \
 )
 all_branches=${usual_branches[@]}
 all_branches+=( \
