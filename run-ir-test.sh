@@ -12,6 +12,8 @@ CLUSTERS_DEFAULT_JOINED="${CLUSTERS_DEFAULT_JOINED_EXTRA_COMMA%,}"
 FEATURE_FLAGS=( \
    PS_FEATURE_FLAG_MULTITENANCY_REPLICATION \
    PS_FEATURE_FLAG_REALM_CONNECTION \
+   PS_FEATURE_FLAG_MULTITENANCY_OBJECT_REALMS_AND_SERVERS \
+   PS_FEATURE_FLAG_ETCD_TO_S3_MT2 \
 )
 
 NFS_LOG_SERVICES=( \
@@ -512,13 +514,13 @@ if [ "$SET_FEATURE_FLAGS" == "1" ] || [ "$RESET_FEATURE_FLAGS" == "1" ]; then
       retval_check $?
 
       if [ -z "$RESET_FEATURE_FLAGS" ]; then
-         for FEATURE_FLAG in ${FEATURE_FLAGS[@]}; do
-            echo "---> turning on feature flag: [$FEATURE_FLAG] <--- [$(date)]"
-            sshpass -p welcome ssh $SSHARGS \
-               ir@$CLUSTER \
-               "exec.py -na -sa \"sudo purefeatureflags enable --flags $FEATURE_FLAG\""
-            retval_check $?
-         done
+         printf -v FEATURE_FLAGS_JOINED_EXTRA_COMMA '%s,' "${FEATURE_FLAGS[@]}"
+         FEATURE_FLAGS_JOINED="${FEATURE_FLAGS_JOINED_EXTRA_COMMA%,}"
+         echo "---> turning on feature flags: [$FEATURE_FLAGS_JOINED] <--- [$(date)]"
+         sshpass -p welcome ssh $SSHARGS \
+            ir@$CLUSTER \
+            "exec.py -na -sa \"sudo purefeatureflags enable --flags $FEATURE_FLAGS_JOINED\""
+         retval_check $?
       fi
       echo "---> restarting cluster [$CLUSTER] <--- [$(date)]"
       time ./run tools/remote/restart_sw.py --wait -na -sa restart -a $CLUSTER
