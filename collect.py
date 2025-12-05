@@ -36,6 +36,7 @@ parser.add_argument('-n', '--num', type=int, help=f'collect only the last <numbe
 parser.add_argument('--min-date', type=str, help='the minimum hour we need data for (format: YYYY-MM-DD.HH)')
 parser.add_argument('--max-date', type=str, help='the maximum date we need data for (format: YYYY-MM-DD.HH)')
 parser.add_argument('--i-want-a-lot', action='store_true', default=False, help='acknowledge that I want to download a lot of data (without this max. 5 logs are allowed each log type)')
+parser.add_argument('--only-few-blades', action='store_true', default=False, help='download logs only from the first 3 blades')
 
 args = parser.parse_args()
 
@@ -58,6 +59,9 @@ print(f'dir_prefix = {dir_prefix}')
 
 i_want_a_lot = args.i_want_a_lot
 print(f'i_want_a_lot = {i_want_a_lot}')
+
+only_few_blades=args.only_few_blades
+print(f'only_few_blades = {only_few_blades}')
 
 number_of_logfiles=args.num
 print(f'number_of_logfiles = {number_of_logfiles}')
@@ -129,7 +133,35 @@ def generate_ls_pattern(logfilename: str):
 def add_fs_list(existing_list: list[str], new_list: list[str]):
     [existing_list.append(s) for s in new_list if s]
 
-clusters_w_qa1_pass = ['batman', 'newt']
+# input is coming from 'pureblade list' like
+# CH1.FB1
+# CH1.FB2
+# CH1.FB3
+# CH2.FB1
+# CH2.FB2
+# CH2.FB3
+# and this function figures out the chassis number
+# in case of 1 chassis it returns ['ir1', 'ir2', ...]
+# in multichassis: ['ch1-fb1', 'ch1-fb2', 'ch2-fb1', ...]
+def get_bladelist(bladelist_str: list[str]) -> list[str]:
+    bladelist = bladelist_str.split('\n')
+    result = []
+    # if [b for b in bladelist_str if not b.find('CH1')]:
+    #     singlechassis = False
+    num_tuples = [] # list of <chassis num, blade num> tuples
+    for b in bladelist:
+        chassis_num = b[2]
+        blade_num = b[6:]
+        num_tuples.append((chassis_num, blade_num))
+    # single chassis if chassis num is the same as the first one for all tuples
+    singlechassis: bool = all(tup[0] == num_tuples[0][0] for tup in num_tuples)
+    if singlechassis:
+        result = ['ir' + b[6:] for b in bladelist]
+    else:
+        result = [f'ch{n[0]}-fb{n[1]}' for n in num_tuples]
+    return result
+
+clusters_w_qa1_pass = ['batman', 'newt', 'artemis']
 clusters_w_qa2_pass = ['krtek']
 # getting passwords from env vars, because I don't want to put them in version control
 pw_qa1=os.environ['PASSWORD_QA1']
@@ -186,13 +218,16 @@ for cluster in clusters:
         standby_fm = 0 if master_fm == 2 else 1
         standby_ip = (ip1, ip2)[standby_fm]
         with paramiko_utils.agentNestedConnectWithPassword(None, standby_ip, username="ir", password=pw, look_for_keys=False) as client_fm:
-            bladelist_str = paramiko_utils.run(client_fm, "pureblade list --notitle | grep -v unused | cut -d' ' -f1 | cut -c7-")
-            bladelist = bladelist_str.split('\n')
+            bladelist_str = paramiko_utils.run(client_fm, "pureblade list --notitle | grep -v unused | cut -d' ' -f1")
+            bladelist = get_bladelist(bladelist_str)
+            if only_few_blades:
+                print(f'Restricting downloads to max 3 blades')
+                bladelist = bladelist[:3]
             print(f'number of blades = {len(bladelist)}')
             assert len(bladelist) > 0, f'bladelist is empty, bladelist_str={bladelist_str}'
-            for bladenum in bladelist:
-                print(f'cluster={cluster}, blade=ir{bladenum}')
-                with paramiko_utils.nestedConnectWithKeyFromClient(client_fm, f'ir{bladenum}', username="ir", key=paramiko_utils.getKeyFromClient(client_fm, "/home/ir/.ssh/id_rsa")) as client_blade:
+            for bladename in bladelist:
+                print(f'cluster={cluster}, blade={bladename}')
+                with paramiko_utils.nestedConnectWithKeyFromClient(client_fm, f'{bladename}', username="ir", key=paramiko_utils.getKeyFromClient(client_fm, "/home/ir/.ssh/id_rsa")) as client_blade:
                     scp = SCPClient(client_blade.get_transport())
                     logfiles = []
                     if 'nfs' in logtypes:
@@ -208,7 +243,7 @@ for cluster in clusters:
                         logfiles_str = paramiko_utils.run(client_blade, f'cd /logs; ' + generate_ls_pattern('haproxy.log'))
                         add_fs_list(logfiles, logfiles_str.split('\n'))
                     print(f'logfiles = {logfiles}')
-                    local_blade_dir = os.path.join(toplevel_logdir, cluster, f'ir{bladenum}')
+                    local_blade_dir = os.path.join(toplevel_logdir, cluster, f'{bladename}')
                     os.makedirs(local_blade_dir)
                     for logfile in logfiles:
                         scp = SCPClient(client_blade.get_transport())
