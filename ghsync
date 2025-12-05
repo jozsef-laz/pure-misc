@@ -21,7 +21,6 @@ usual_branches=( \
 )
 all_branches=${usual_branches[@]}
 all_branches+=( \
-   area/pasg \
    rel4-6-0 \
    rel4-6-cde \
 )
