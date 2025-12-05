@@ -279,3 +279,9 @@ with open('cd', 'w') as f:
     lines = ['#! /bin/bash\n'
              f'cd {toplevel_logdir}\n']
     f.writelines(lines)
+
+with open(f'{toplevel_logdir}/rem', 'w') as f:
+    lines = ['#! /bin/bash\n'
+             'cd ..\n'
+             f'rm -rf {toplevel_logdir}\n']
+    f.writelines(lines)
