@@ -3,6 +3,13 @@
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
+retval_check () {
+   RETVAL=$1
+   if [ $RETVAL != 0 ]; then
+      exit $RETVAL
+   fi
+}
+
 RESET=0
 while getopts "sfra" option; do
    case $option in
@@ -21,8 +28,15 @@ usual_branches=( \
 )
 all_branches=${usual_branches[@]}
 all_branches+=( \
-   rel4-6-0 \
-   rel4-6-cde \
+)
+pgit_repos=( \
+   fusion-shared \
+   object \
+   tpc/alloy \
+   pure-cc-tests \
+   tpc/zuzu \
+   exa/datanode \
+   dsx \
 )
 
 if [ "$ALL_BRANCHES" == "1" ]; then
@@ -36,6 +50,7 @@ if [ "$SYNC" == "1" ]; then
    do
       echo "--> syncing branch: [$branch]"
       gh repo sync pure-forks/jlaz-iridium -b $branch
+      retval_check $?
    done
    echo ""
 fi
@@ -49,25 +64,12 @@ if [ "$FETCH" == "1" ]; then
    echo ""
 
    if [ "$ALL_BRANCHES" == "1" ]; then
-      echo "--> pulling LAMELLA repo"
-      git -C object pull --quiet --prune --ff-only
-      echo "[DIR=object] retval=[$?]"
-
-      # echo "--> pulling ALLOY repo"
-      # git -C tpc/alloy_sync pull --quiet --prune --ff-only
-      # echo "[DIR=tpc/alloy_sync] retval=[$?]"
-
-      echo "--> pulling FUSION repo"
-      git -C fusion-shared pull --quiet --prune --ff-only
-      echo "[DIR=fusion-shared] retval=[$?]"
-
-      echo "--> pulling dsx repo"
-      git -C dsx pull --quiet --prune --ff-only
-      echo "[DIR=dsx] retval=[$?]"
-
-      echo "--> pulling pure-cc-tests repo"
-      git -C pure-cc-tests pull --quiet --prune --ff-only
-      echo "[DIR=pure-cc-tests] retval=[$?]"
+      for repo in ${pgit_repos[@]}
+      do
+         echo "--> pulling repo: [$repo]"
+         git -C $repo pull --quiet --prune --ff-only
+         retval_check $?
+      done
    fi
 fi
 
