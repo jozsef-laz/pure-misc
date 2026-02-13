@@ -702,7 +702,7 @@ if [ "$RUN_TEST" == "1" ]; then
    TEST_RESULT=$?
 
    echo "---> collecting the logs <---"
-   time python3 ~/work/misc/collect.py -d triage -c $CLUSTERS_JOINED -l platform,middleware,nfs,platform_blades,system,system_blades -n 3
+   time python3 ~/work/misc/collect.py -d ~/work/triage -c $CLUSTERS_JOINED -l platform,middleware,nfs,platform_blades,system,system_blades -n 3
 
    if [ "$TEST_RESULT" == "0" ]; then
       echo -e "\n${GREEN}SUCCESS${NC}\n"
