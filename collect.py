@@ -26,6 +26,9 @@ list of logtypes which we want to download (separated by comma)
     - system: system.log of FMs
     - system_blades: system.log of blades
     - haproxy_blades: haproxy.log of blades
+    - congo: congo.log of FMs
+    - congo_blades: congo.log of blades
+    - http: ir-http logs of blades
     - atop_blades: atop measurements on blades
    default value: \"{LOGTYPES_DEFAULT_ARG}\"''')
 parser.add_argument('-d', '--dir-prefix', type=str, default='', help='''\
@@ -51,8 +54,8 @@ assert len(clusters) > 0, 'len(clusters) is 0'
 logtypes=args.logtypes.split(',')
 print(f'logtypes = {logtypes}')
 assert len(logtypes) > 0, 'len(logtypes) is 0'
-want_blade_logs = list(set(logtypes) & {"nfs", "platform_blades", "system_blades", "haproxy_blades"})
-want_fm_logs = list(set(logtypes) & {"middleware", "middleware_db_dump", "platform", "system"})
+want_blade_logs = list(set(logtypes) & {"nfs", "platform_blades", "system_blades", "haproxy_blades", "congo_blades", "http"})
+want_fm_logs = list(set(logtypes) & {"middleware", "middleware_db_dump", "platform", "system", "congo"})
 
 dir_prefix=args.dir_prefix
 print(f'dir_prefix = {dir_prefix}')
@@ -207,6 +210,9 @@ for cluster in clusters:
                 if 'system' in logtypes:
                     logfiles_str = paramiko_utils.run(client_fm, f'cd /logs; ' + generate_ls_pattern('system.log'))
                     add_fs_list(logfiles, logfiles_str.split('\n'))
+                if 'congo' in logtypes:
+                    logfiles_str = paramiko_utils.run(client_fm, f'cd /logs; ' + generate_ls_pattern('congo.log'))
+                    add_fs_list(logfiles, logfiles_str.split('\n'))
                 print(f'logfiles = {logfiles}')
                 for logfile in logfiles:
                     scp = SCPClient(client_fm.get_transport())
@@ -241,6 +247,12 @@ for cluster in clusters:
                         add_fs_list(logfiles, logfiles_str.split('\n'))
                     if 'haproxy_blades' in logtypes:
                         logfiles_str = paramiko_utils.run(client_blade, f'cd /logs; ' + generate_ls_pattern('haproxy.log'))
+                        add_fs_list(logfiles, logfiles_str.split('\n'))
+                    if 'congo_blades' in logtypes:
+                        logfiles_str = paramiko_utils.run(client_blade, f'cd /logs; ' + generate_ls_pattern('congo.log'))
+                        add_fs_list(logfiles, logfiles_str.split('\n'))
+                    if 'http' in logtypes:
+                        logfiles_str = paramiko_utils.run(client_blade, f'cd /logs; ' + generate_ls_pattern('http.log'))
                         add_fs_list(logfiles, logfiles_str.split('\n'))
                     print(f'logfiles = {logfiles}')
                     local_blade_dir = os.path.join(toplevel_logdir, cluster, f'{bladename}')
