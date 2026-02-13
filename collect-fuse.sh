@@ -246,6 +246,7 @@ done
 echo "decompressing every .zst file we downloaded in DIR=[$DIR] ..."
 find $DIR -name '*.zst' -exec sh -c 'zstd -d "{}"; rm -f "{}"' \;
 
+echo "DIR=[$DIR]"
 $(cd $DIR; cluster-info.sh)
 
 echo "Directory in which the logs are downloaded: $DIR"
