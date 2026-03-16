@@ -1,0 +1,55 @@
+#! /bin/bash
+
+# lamella sync
+
+RED='\033[0;31m'
+NC='\033[0m' # No Color
+
+retval_check () {
+   RETVAL=$1
+   if [ $RETVAL != 0 ]; then
+      exit $RETVAL
+   fi
+}
+
+branches=( \
+   main \
+)
+
+REMOTE_URL=$(git config --get remote.origin.url)
+if [[ $REMOTE_URL != *"lamella.git" ]]; then
+   echo "this directory is not a lamella checkout, stopping..."
+   exit 1
+fi
+
+git fetch
+
+echo "--> resetting branches"
+for branch in ${branches[@]}
+do
+   git rev-parse --verify $branch > /dev/null 2>&1
+   if [ "$?" != "0" ]
+   then
+      echo -e "no such branch: [$branch], skipping..."
+      continue
+   fi
+   if [ "$(git show --pretty=format:%h $branch)" == "$(git show --pretty=format:%h origin/$branch)" ]
+   then
+      echo "[$branch] already up-to-date with origin, continuing..."
+      continue
+   else
+      if [ "$(git branch --show-current)" == "$branch" ]
+      then
+         echo -e "${RED}not resetting branch: [$branch], because we're on this branch\n" \
+                 "please merge origin or upstream manually${NC}"
+      else
+      echo "resetting branch: [$branch]"
+      git branch --force $branch origin/$branch
+      if [ "$?" != "0" ]
+      then
+         echo -e "${RED}resetting branch failed${NC}"
+      fi
+      fi
+   fi
+done
+echo ""
