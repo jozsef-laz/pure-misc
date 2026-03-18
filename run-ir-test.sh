@@ -229,7 +229,7 @@ if [ ! -z "$DEPLOY_TARGETS" ]; then
       if [ ! -z "$(echo $DEPLOY_TARGETS | grep $target)" ]; then SA_TARGETS="$SA_TARGETS $target"; fi
    done
 
-   for target in cpp_release cpp_debug cpp_asan; do
+   for target in cpp_release cpp_debug cpp_asan http lamella-server; do
       if [ ! -z "$(echo $DEPLOY_TARGETS | grep $target)" ]; then NA_TARGETS="$NA_TARGETS $target"; fi
    done
 
@@ -702,7 +702,7 @@ if [ "$RUN_TEST" == "1" ]; then
    TEST_RESULT=$?
 
    echo "---> collecting the logs <---"
-   time python3 ~/work/misc/collect.py -d ~/work/triage -c $CLUSTERS_JOINED -l platform,middleware,nfs,platform_blades,system,system_blades -n 3
+   time python3 ~/work/misc/collect.py -d ~/work/triage -c $CLUSTERS_JOINED -l platform,middleware,nfs,platform_blades,system,system_blades,http -n 3
 
    if [ "$TEST_RESULT" == "0" ]; then
       echo -e "\n${GREEN}SUCCESS${NC}\n"
