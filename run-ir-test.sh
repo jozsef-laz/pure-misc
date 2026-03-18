@@ -3,10 +3,6 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 NC='\033[0m'
 
-#CLUSTERS_DEFAULT=(irp871-c76 irp871-c77)
-CLUSTERS_DEFAULT=()
-printf -v CLUSTERS_DEFAULT_JOINED_EXTRA_COMMA '%s,' "${CLUSTERS_DEFAULT[@]}"
-CLUSTERS_DEFAULT_JOINED="${CLUSTERS_DEFAULT_JOINED_EXTRA_COMMA%,}"
 #DEFAULT_DEPLOY_TARGETS="middleware,cpp_release,feature-flags-system,feature-flags-admin,pure-cli,etcd,admin,inuk,plugins,netconf"
 
 FEATURE_FLAGS=( \
@@ -144,10 +140,11 @@ shift $((OPTIND-1))
 date
 echo
 
-if [ -z "$CLUSTERS_JOINED" ]; then
-   CLUSTERS_JOINED=$CLUSTERS_DEFAULT_JOINED
-   CLUSTERS=("${CLUSTERS_DEFAULT[@]}")
+if [ "$CLUSTERS_JOINED" == "devvm" ] || [ "$CLUSTERS_JOINED" == "local_sim" ]; then
+   CLUSTERS_JOINED="10.255.8.20"
+   CLUSTERS=($CLUSTERS_JOINED)
 fi
+
 echo -ne "Used clusters:\n   "
 for CLUSTER in ${CLUSTERS[@]}; do
    echo -n " [$CLUSTER]"
@@ -660,39 +657,34 @@ if [ "$RUN_TEST" == "1" ]; then
    else
       TESTCASE=${TEST_DICT[$TEST_NUM]}
    fi
-   echo "---> checking  <--- [$(date)]"
-   ( cd /home/ir/work/initiator_tools
-      if [ ! -f initiator_tools-$SHA-1404.tar.gz ]; then
-         pure_artifacts fetch --path build/$SHA/ubuntu1404 initiator_tools.tar.gz
-         retval_check $?
-         mv initiator_tools.tar.gz initiator_tools-$SHA-1404.tar.gz
-      fi
-   )
+   # echo "---> checking  <--- [$(date)]"
+   # ( cd /home/ir/work/initiator_tools
+   #    if [ ! -f initiator_tools-$SHA-1404.tar.gz ]; then
+   #       pure_artifacts fetch --path build/$SHA/ubuntu1404 initiator_tools.tar.gz
+   #       retval_check $?
+   #       mv initiator_tools.tar.gz initiator_tools-$SHA-1404.tar.gz
+   #    fi
+   # )
 
    echo "---> cleaning ir_test.log  <--- [$(date)]"
    rm -f ir_test.log
 
+   INITIATOR_ADDRESS_ARG=""
+   if [ "$CLUSTERS_JOINED" == "devvm" ] || [ "$CLUSTERS_JOINED" == "local_sim" ] || [ "$CLUSTERS_JOINED" == "10.255.8.20" ]; then
+      # when running local sim, we need this extra arg
+      INITIATOR_ADDRESS_ARG="--initiator-address='irdv-jlaz'"
+   fi
+
    echo "---> running the test <--- [$(date)]"
    echo "---> TEST_NUM=[$TEST_NUM], TESTCASE=[$TESTCASE] <--- [$(date)]"
-   # PS_FEATURE_FLAG_ENCRYPTED_FILE_REPLICATION=true
-   # INSTALL_PYTHON_REST_CLIENT=1
-   # export INSTALL_PYTHON_REST_CLIENT=1
-   # time AD_TEST_DOMAINS="dc=ir-jad2019,dc=local" ./run ir_test/exec_test \
-   #    --update_initiators=0 \
-   #    --verbose \
-   #    --color=yes \
-   #    --show-capture=no \
-   #    --exitfirst \
-   #    --config ${CLUSTERS[0]} \
-   #    $TESTCASE
-   echo "export INSTALL_PYTHON_REST_CLIENT=1; \
+   echo " \
       ir_test/exec_test \
+      --config='${CLUSTERS[0]}' \
+      $INITIATOR_ADDRESS_ARG \
       --verbose \
       --color=yes \
       --show-capture=no \
       --exitfirst \
-      --run-only-replication-sim \
-      --config \'${CLUSTERS[0]}\' \
       $TESTCASE" > script.sh
    chmod u+x script.sh
    echo -e "script.sh:\n---------------------"
