@@ -11,12 +11,14 @@ retval_check () {
 }
 
 RESET=0
-while getopts "sfra" option; do
+while getopts "sfrape" option; do
    case $option in
       s) SYNC=1 ;;
       f) FETCH=1 ;;
       r) RESET=1 ;;
       a) ALL_BRANCHES=1 ;;
+      p) PGIT=1 ;;
+      e) EVERYTHING=1 ;;
    esac
 done
 
@@ -24,10 +26,14 @@ done
 usual_branches=( \
    master \
    dev \
-   rel4-6-fg \
 )
 all_branches=${usual_branches[@]}
 all_branches+=( \
+   rel4-5-x \
+   rel4-6-fg \
+   rel4-7-x \
+   rel4-8-abc \
+   rel4-8-b_staging \
 )
 pgit_repos=( \
    fusion-shared \
@@ -38,6 +44,14 @@ pgit_repos=( \
    exa/datanode \
    dsx \
 )
+
+if [ "$EVERYTHING" == "1" ]; then
+   SYNC=1
+   FETCH=1
+   RESET=1
+   ALL_BRANCHES=1
+   PGIT=1
+fi
 
 if [ "$ALL_BRANCHES" == "1" ]; then
    branches=${all_branches[@]}
@@ -55,7 +69,16 @@ if [ "$SYNC" == "1" ]; then
    echo ""
 fi
 
+OS=$(uname -o)
+if [[ $OS == *"Darwin"* ]]; then
+   if [ "$PGIT" == "1" ]; then
+      echo "--> NOT fetching pgit repos on Mac"
+      PGIT=""
+   fi
+fi
+
 if [ "$FETCH" == "1" ]; then
+
    echo "--> fetching main repos"
    git fetch --prune origin
    echo "fetching origin retval=[$?]"
@@ -63,7 +86,7 @@ if [ "$FETCH" == "1" ]; then
    echo "fetching upstream retval=[$?]"
    echo ""
 
-   if [ "$ALL_BRANCHES" == "1" ]; then
+   if [ "$PGIT" == "1" ]; then
       for repo in ${pgit_repos[@]}
       do
          echo "--> pulling repo: [$repo]"
