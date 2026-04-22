@@ -46,7 +46,7 @@ def getKeyFromClient(client: paramiko.SSHClient, key_filepath: str):
             key_string = remote_key_file.read().decode('utf-8')
 
     key_stream = io.StringIO(key_string)
-    for cls in (paramiko.RSAKey, paramiko.DSSKey, paramiko.ECDSAKey, paramiko.Ed25519Key):
+    for cls in (paramiko.RSAKey, paramiko.ECDSAKey, paramiko.Ed25519Key):
         try:
             key_stream.seek(0)
             key = cls.from_private_key(key_stream)
