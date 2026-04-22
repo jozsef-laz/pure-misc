@@ -54,7 +54,7 @@ assert len(clusters) > 0, 'len(clusters) is 0'
 logtypes=args.logtypes.split(',')
 print(f'logtypes = {logtypes}')
 assert len(logtypes) > 0, 'len(logtypes) is 0'
-want_blade_logs = list(set(logtypes) & {"nfs", "platform_blades", "system_blades", "haproxy_blades", "congo_blades", "http"})
+want_blade_logs = list(set(logtypes) & {"nfs", "platform_blades", "system_blades", "haproxy_blades", "congo_blades", "http", "atop_blades"})
 want_fm_logs = list(set(logtypes) & {"middleware", "middleware_db_dump", "platform", "system", "congo"})
 
 dir_prefix=args.dir_prefix
@@ -253,6 +253,9 @@ for cluster in clusters:
                         add_fs_list(logfiles, logfiles_str.split('\n'))
                     if 'http' in logtypes:
                         logfiles_str = paramiko_utils.run(client_blade, f'cd /logs; ' + generate_ls_pattern('http.log'))
+                        add_fs_list(logfiles, logfiles_str.split('\n'))
+                    if 'atop_blades' in logtypes:
+                        logfiles_str = paramiko_utils.run(client_blade, f'cd /logs; ' + generate_ls_pattern('atop_raw.log'))
                         add_fs_list(logfiles, logfiles_str.split('\n'))
                     print(f'logfiles = {logfiles}')
                     local_blade_dir = os.path.join(toplevel_logdir, cluster, f'{bladename}')
