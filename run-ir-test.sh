@@ -65,9 +65,6 @@ usage() {
    echo "  --reset-feature-flags    disable every extra feature flags, reset system to the base state" 1>&2
    echo "  -l                       clean logs (on FMs & blades: /logs/*)" 1>&2
    echo "  -t <num>                 running numbered test, with 0 it lists available testcases" 1>&2
-   echo "  -x                       temp: deleting hedghog fs+link and recreating it (with link)" 1>&2
-   echo "  --only-clean             when used with -x, hedghog fs+link will be only cleaned, not recreated" 1>&2
-   echo "  --fsstress               running fsstress for hedgehog fs" 1>&2
    echo "  --create-datavip         creates datavip on all clusters" 1>&2
    echo "  --nfs-debug-log          turns on nfs debug logs" 1>&2
    echo "  -h              help" 1>&2
@@ -126,9 +123,6 @@ while getopts "idarceflt:xh-:" OPT; do
       reset-feature-flags) RESET_FEATURE_FLAGS=1 ;;
       l) CLEAN_LOGS=1 ;;
       t) RUN_TEST=1; TEST_NUM=$OPTARG ;;
-      x) X_RECREATE_HEDGEHOG=1 ;;
-      only-clean) X_ONLY_CLEAN=1 ;;
-      fsstress) RUN_FSSTRESS=1 ;;
       create-datavip) CREATE_DATA_VIP=1 ;;
       nfs-debug-log) NFS_DEBUG_LOG=1 ;;
       h) usage ;;
@@ -365,7 +359,6 @@ nextip(){
 }
 
 if [ "$CREATE_DATA_VIP" == "1" ]; then
-   retval_check $?
    for CLUSTER in ${CLUSTERS[@]}; do
       echo "CLUSTER = [$CLUSTER]"
       echo "---> checking data vip on clusters <---"
@@ -538,107 +531,9 @@ if [ "$CLEAN_LOGS" == "1" ]; then
    done
 fi
 
-if [ "$X_RECREATE_HEDGEHOG" == "1" ]; then
-   FSNAME="hedgehog"
-   echo "---> are there any replica links? <--- [$(date)]"
-   REPLICA_LINK_LIST=$(sshpass -p welcome ssh $SSHARGS \
-      ir@${CLUSTERS[0]} \
-      "purefs replica-link list $FSNAME")
-   if [ ! -z "$(echo $REPLICA_LINK_LIST | grep $FSNAME)" ]; then
-      echo "---> removing replica link <--- [$(date)]"
-      sshpass -p welcome ssh $SSHARGS \
-         ir@${CLUSTERS[0]} \
-         "purefs replica-link delete $FSNAME --remote ${CLUSTERS[1]} --cancel-in-progress-transfers"
-      echo "---> waiting for heartbeat to remove link on target <--- [$(date)]"
-      sleep 15
-   fi
-
-   FSINFO=$(sshpass -p welcome ssh $SSHARGS \
-      ir@${CLUSTERS[0]} \
-      "purefs list --notitle --csv $FSNAME")
-   echo -e "---> FSINFO=[\n$FSINFO\n] <--- [$(date)]"
-   echo "---> removing replica link <--- [$(date)]"
-   sshpass -p welcome ssh $SSHARGS \
-      ir@${CLUSTERS[0]} \
-      "purefs replica-link delete $FSNAME --remote ${CLUSTERS[1]} --cancel-in-progress-transfers"
-   if [ ! -z "$(echo $FSINFO | grep $FSNAME)" ]; then
-      if [ ! -z "$(echo $FSINFO | cut -d',' -f7)" ]; then
-         echo "---> removing protocol flag from fs on source: FSNAME=[$FSNAME] <--- [$(date)]"
-         sshpass -p welcome ssh $SSHARGS \
-            ir@${CLUSTERS[0]} \
-            "purefs remove --protocol nfsv3 $FSNAME"
-      fi
-      echo "---> removing fs on source: FSNAME=[$FSNAME] <--- [$(date)]"
-       sshpass -p welcome ssh $SSHARGS \
-          ir@${CLUSTERS[0]} \
-         "purefs destroy --delete-link-on-eradication $FSNAME; purefs eradicate $FSNAME"
-      retval_check $?
-   fi
-
-   FSINFO_1=$(sshpass -p welcome ssh $SSHARGS \
-       ir@${CLUSTERS[1]} \
-      "purefs list --notitle --csv $FSNAME")
-   if [ ! -z "$(echo $FSINFO_1 | grep $FSNAME)" ]; then
-      echo "---> removing fs on target: FSNAME=[$FSNAME] <--- [$(date)]"
-      sshpass -p welcome ssh $SSHARGS \
-         ir@${CLUSTERS[1]} \
-         "purefs destroy $FSNAME; purefs eradicate $FSNAME"
-      retval_check $?
-   fi
-
-   if [ "$X_ONLY_CLEAN" != "1" ]; then
-      echo "---> creating fs on source: FSNAME=[$FSNAME] <--- [$(date)]"
-      sshpass -p welcome ssh $SSHARGS \
-         ir@${CLUSTERS[0]} \
-         "purefs create $FSNAME"
-      retval_check $?
-      echo "---> adding protocol flag to fs on source: FSNAME=[$FSNAME] <--- [$(date)]"
-      sshpass -p welcome ssh $SSHARGS \
-         ir@${CLUSTERS[0]} \
-         "purefs add --protocol nfsv3 $FSNAME"
-      retval_check $?
-      echo "---> creating replica link <--- [$(date)]"
-      sshpass -p welcome ssh $SSHARGS \
-         ir@${CLUSTERS[0]} \
-         "purefs replica-link create --remote ${CLUSTERS[1]} $FSNAME"
-      retval_check $?
-   fi
-fi
-
-# this is not smart enough yet
-if [ "$RUN_FSSTRESS" == "1" ]; then
-   FSNAME="hedgehog"
-   DATAVIP=$(sshpass -p welcome ssh $SSHARGS ${CLUSTERS[0]} "purenetwork list --csv" | grep ^data | cut -d',' -f5)
-   echo "---> DATAVIP=[$DATAVIP] <---"
-   if [ -z "$DATAVIP" ]; then
-      echo "Error: there's no data vip on the cluster"
-      exit 1
-   fi
-   FSSTRESS_LOG_PATH="/home/ir/fsstress-$(date '+%H-%M-%S').log"
-   echo "FSSTRESS_LOG_PATH=[$FSSTRESS_LOG_PATH]"
-   echo "---> running fsstress <---"
-   time sshpass -p welcome ssh $SSHARGS ir@${CLUSTERS[0]}h01 "/ir_test/tools/bld_linux/bin/fsstress \
-      --config /ir_test/tools/bld_linux/fill_sim.cfg \
-      --duration 60 \
-      --server $DATAVIP \
-      --timeout 120 \
-      --path /$FSNAME/left,/$FSNAME/right \
-      --nfsdtype SIMULATION >> $FSSTRESS_LOG_PATH"
-   retval_check $?
-fi
-
 declare -A TEST_DICT=( \
-   [1]="ir_test/functional/replication/test_replication_encryption.py::test_cross_version_encrypted_link_creation" \
-   [2]="ir_test/functional/replication/replication_throttling.py::test_throttling_trio" \
-   [3]="ir_test/functional/replication/test_tc.py" \
-   [4]="ir_test/functional/replication/test_replication_with_nfsd_restart.py -k restart_one_or_two_blades_per_resgrp" \
-   [5]="ir_test/functional/cli/purepolicy_test.py::test_purepolicy_list_member" \
-   [6]="ir_test/functional/replication/test_replica_links.py::test_replica_link_delete_and_relink" \
-   [7]="ir_test/functional/replication/test_replication_encryption.py::test_fb_to_fb_secure_repl_nfsd_traffic[0-False]" \
-   [8]="ir_test/functional/uiscale_replication_inuk_mocker/scale_snapshot_policy_scheduler_test.py" \
-   [9]="ir_test/functional/python_rest_client/test-replication-file/test_file_system_replica_link_transfer_api.py" \
-   [10]="ir_test/functional/python_rest_client/test-replication-file/test_file_system_replica_link_transfer_api.py[REST=2.18,Auth=auth_api_token-0]" \
-   [11]="ir_test/functional/cli/pureaudit_coverage_test.py::test_pureaudit_matches_found_replication_with_connection ir_test/functional/cli/purefs_test.py::test_purefs_replication_audit" \
+   [1]="ir_test/functional/nfs_over_http/s2_http_inuk.py::test_remove_scratch_dir_on_startup ir_test/functional/nfs_over_http/s2_http_inuk.py::test_remove_scratch_dir_on_http_disable" \
+   [2]="ir_test/functional/objstore/test_objstore_versioning.py" \
 )
 
 if [ "$RUN_TEST" == "1" ]; then
@@ -657,14 +552,6 @@ if [ "$RUN_TEST" == "1" ]; then
    else
       TESTCASE=${TEST_DICT[$TEST_NUM]}
    fi
-   # echo "---> checking  <--- [$(date)]"
-   # ( cd /home/ir/work/initiator_tools
-   #    if [ ! -f initiator_tools-$SHA-1404.tar.gz ]; then
-   #       pure_artifacts fetch --path build/$SHA/ubuntu1404 initiator_tools.tar.gz
-   #       retval_check $?
-   #       mv initiator_tools.tar.gz initiator_tools-$SHA-1404.tar.gz
-   #    fi
-   # )
 
    echo "---> cleaning ir_test.log  <--- [$(date)]"
    rm -f ir_test.log
