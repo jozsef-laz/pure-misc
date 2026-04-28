@@ -35,15 +35,6 @@ all_branches+=( \
    rel4-8-abc \
    rel4-8-b_staging \
 )
-pgit_repos=( \
-   fusion-shared \
-   object \
-   tpc/alloy \
-   pure-cc-tests \
-   tpc/zuzu \
-   exa/datanode \
-   dsx \
-)
 
 if [ "$EVERYTHING" == "1" ]; then
    SYNC=1
@@ -69,14 +60,6 @@ if [ "$SYNC" == "1" ]; then
    echo ""
 fi
 
-OS=$(uname -o)
-if [[ $OS == *"Darwin"* ]]; then
-   if [ "$PGIT" == "1" ]; then
-      echo "--> NOT fetching pgit repos on Mac"
-      PGIT=""
-   fi
-fi
-
 if [ "$FETCH" == "1" ]; then
 
    echo "--> fetching main repos"
@@ -87,12 +70,7 @@ if [ "$FETCH" == "1" ]; then
    echo ""
 
    if [ "$PGIT" == "1" ]; then
-      for repo in ${pgit_repos[@]}
-      do
-         echo "--> pulling repo: [$repo]"
-         git -C $repo pull --quiet --prune --ff-only
-         retval_check $?
-      done
+      pgit sync --all
    fi
 fi
 
