@@ -79,10 +79,6 @@ print(f'Directory in which we download the logs: {logdir}')
 
 # only the leaf directory is created, no parents (for safety considerations)
 os.mkdir(logdir)
-latest_link = os.path.join(dir_prefix, 'latest-collection') if dir_prefix else 'latest-collection'
-if os.path.lexists(latest_link):
-    os.remove(latest_link)
-os.symlink(logdir, latest_link)
 
 # fuse uses underscore
 fuse_date = date.replace('-', '_')
@@ -169,11 +165,10 @@ blade_logtype_to_filename = [
 
 print(f'\n-------- Collecting logs from CLUSTER=[{cluster}] --------\n')
 
-with connect_via_ssh_config(fuse_server) as client:
-    scp = SCPClient(client.get_transport())
-    logdirs_str = paramiko_utils.run(client, f'cd {cluster_dir_on_fuse}/{fuse_date}; ls')
-    logdirs = logdirs_str.split()
-    print(f'logdirs=[{logdirs}]')
+def download_fm_logs(scp, logdirs):
+    want_fm_logs = any(lt in logtypes for lt, _ in fm_logtype_to_filename)
+    if not want_fm_logs:
+        return
 
     fm_dirs = [d for d in logdirs if re.search(r'fm[12]$', d)]
     print(f'fm_dirs=[{fm_dirs}]')
@@ -185,6 +180,11 @@ with connect_via_ssh_config(fuse_server) as client:
             if logtype in logtypes:
                 download_desired_logs(client, scp, fm, filename, local_fm_dir)
 
+def download_blade_logs(scp, logdirs):
+    want_blade_logs = any(lt in logtypes for lt, _ in blade_logtype_to_filename)
+    if not want_blade_logs:
+        return
+
     blade_dirs = [d for d in logdirs if re.search(r'fb[0-9]+$', d)]
     print(f'blade_dirs=[{blade_dirs}]')
     for blade in blade_dirs:
@@ -194,6 +194,15 @@ with connect_via_ssh_config(fuse_server) as client:
         for logtype, filename in blade_logtype_to_filename:
             if logtype in logtypes:
                 download_desired_logs(client, scp, blade, filename, local_blade_dir)
+
+with connect_via_ssh_config(fuse_server) as client:
+    scp = SCPClient(client.get_transport())
+    logdirs_str = paramiko_utils.run(client, f'cd {cluster_dir_on_fuse}/{fuse_date}; ls')
+    logdirs = logdirs_str.split()
+    print(f'logdirs=[{logdirs}]')
+
+    download_fm_logs(scp, logdirs)
+    download_blade_logs(scp, logdirs)
 
 print(f'decompressing every .zst file we downloaded in logdir=[{logdir}] ...')
 subprocess.run(["find", logdir, "-name", "*.zst", "-exec", "sh", "-c", 'zstd -d "{}"; rm -f "{}"', ";"])
