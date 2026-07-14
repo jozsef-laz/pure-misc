@@ -1,0 +1,3 @@
+set smartcase
+set hls
+autocmd BufRead *.log set ft=log

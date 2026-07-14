@@ -180,6 +180,14 @@ if [ "$INITIATE_CLUSTER" == "1" ]; then
       --blades 3 \
       --sha $SHA
    retval_check $?
+
+   for CLUSTER in ${CLUSTERS[@]}; do
+      echo "---> spreading .vimrc on [$CLUSTER] <---"
+      sshpass -p welcome scp /home/ir/work/misc/vimrc-for-clusters $CLUSTER:~/.vimrc
+      sshpass -p welcome ssh $SSHARGS \
+         ir@$CLUSTER \
+         "exec.py -na -sa \"scp sup:/home/ir/.vimrc ~\""
+   done
 fi
 
 if [ "$DEBUG_VERSION" == "1" ]; then
