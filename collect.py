@@ -30,6 +30,7 @@ list of logtypes which we want to download (separated by comma)
     - congo_blades: congo.log of blades
     - http: ir-http logs of blades
     - atop_blades: atop measurements on blades
+    - fusiond_grpc_msgs: fusiond_grpc_msgs.log
    default value: \"{LOGTYPES_DEFAULT_ARG}\"''')
 parser.add_argument('-d', '--dir-prefix', type=str, default='', help='''\
 relative path where log pack directory shall be created.
@@ -128,6 +129,8 @@ def generate_ls_pattern(logfilename: str):
         else:
             return f'ls {logfilename}* -tr | tail --lines {number_of_logfiles}'
     else:
+        # if there's no number_of_logfiles set, that means we're using --min-date & --max-date,
+        # so we're relying on date pattern
         res = 'ls'
         for d in date_patterns:
             res += f' {logfilename}.{d}*'
@@ -213,6 +216,9 @@ for cluster in clusters:
                 if 'congo' in logtypes:
                     logfiles_str = paramiko_utils.run(client_fm, f'cd /logs; ' + generate_ls_pattern('congo.log'))
                     add_fs_list(logfiles, logfiles_str.split('\n'))
+                if 'fusiond_grpc_msgs' in logtypes:
+                    logfiles_str = paramiko_utils.run(client_fm, f'cd /logs; ' + generate_ls_pattern('fusiond_grpc_msgs.log'))
+                    add_fs_list(logfiles, logfiles_str.split('\n'))
                 print(f'logfiles = {logfiles}')
                 for logfile in logfiles:
                     scp = SCPClient(client_fm.get_transport())
@@ -256,6 +262,9 @@ for cluster in clusters:
                         add_fs_list(logfiles, logfiles_str.split('\n'))
                     if 'atop_blades' in logtypes:
                         logfiles_str = paramiko_utils.run(client_blade, f'cd /logs; ' + generate_ls_pattern('atop_raw.log'))
+                        add_fs_list(logfiles, logfiles_str.split('\n'))
+                    if 'fusiond_grpc_msgs' in logtypes:
+                        logfiles_str = paramiko_utils.run(client_blade, f'cd /logs; ' + generate_ls_pattern('fusiond_grpc_msgs.log'))
                         add_fs_list(logfiles, logfiles_str.split('\n'))
                     print(f'logfiles = {logfiles}')
                     local_blade_dir = os.path.join(toplevel_logdir, cluster, f'{bladename}')
